@@ -11,11 +11,17 @@ const deployServiceAccountEmail = config.require("deployServiceAccountEmail");
 
 // CI/CD provider configuration (at least one required)
 const bitbucketWorkspaceUuid = config.get("bitbucketWorkspaceUuid");
+const bitbucketWorkspaceSlug = config.get("bitbucketWorkspaceSlug"); // Required if using Bitbucket
 const githubOwner = config.get("githubOwner"); // GitHub org or username
 
 // Validate at least one provider is configured
 if (!bitbucketWorkspaceUuid && !githubOwner) {
     throw new Error("At least one CI/CD provider must be configured: set bitbucketWorkspaceUuid or githubOwner");
+}
+
+// Validate Bitbucket requires both UUID and slug
+if (bitbucketWorkspaceUuid && !bitbucketWorkspaceSlug) {
+    throw new Error("Bitbucket requires both bitbucketWorkspaceUuid and bitbucketWorkspaceSlug");
 }
 
 // Common labels for all resources
@@ -63,15 +69,16 @@ const wifPool = new gcp.iam.WorkloadIdentityPool("cicd-pool", {
 }, { dependsOn: [iamCredentialsApi, stsApi] });
 
 // Bitbucket WIF Provider (conditional)
+// Note: issuerUri uses workspace SLUG, attributeCondition uses workspace UUID
 let bitbucketProvider: gcp.iam.WorkloadIdentityPoolProvider | undefined;
-if (bitbucketWorkspaceUuid) {
+if (bitbucketWorkspaceUuid && bitbucketWorkspaceSlug) {
     bitbucketProvider = new gcp.iam.WorkloadIdentityPoolProvider("bitbucket-provider", {
         workloadIdentityPoolId: wifPool.workloadIdentityPoolId,
         workloadIdentityPoolProviderId: "bitbucket",
         displayName: "Bitbucket OIDC Provider",
         description: "OIDC provider for Bitbucket Pipelines",
         oidc: {
-            issuerUri: `https://api.bitbucket.org/2.0/workspaces/${bitbucketWorkspaceUuid}/pipelines-config/identity/oidc`,
+            issuerUri: `https://api.bitbucket.org/2.0/workspaces/${bitbucketWorkspaceSlug}/pipelines-config/identity/oidc`,
         },
         attributeMapping: {
             "google.subject": "assertion.sub",
