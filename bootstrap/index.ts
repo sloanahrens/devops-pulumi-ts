@@ -48,7 +48,19 @@ const cryptoKey = new gcp.kms.CryptoKey("pulumi-state-key", {
     },
 });
 
+// Grant GCS service agent permission to use the KMS key for bucket encryption
+// Note: The GCS service agent is created when Storage API is enabled, so we depend on storageApi
+const projectNumber = gcp.organizations.getProjectOutput({ projectId });
+const gcsServiceAgent = pulumi.interpolate`serviceAccount:service-${projectNumber.number}@gs-project-accounts.iam.gserviceaccount.com`;
+
+const gcsKmsBinding = new gcp.kms.CryptoKeyIAMBinding("gcs-sa-kms-binding", {
+    cryptoKeyId: cryptoKey.id,
+    role: "roles/cloudkms.cryptoKeyEncrypterDecrypter",
+    members: [gcsServiceAgent],
+}, { dependsOn: [storageApi] });
+
 // GCS Bucket for Pulumi state
+// Depends on gcsKmsBinding so the GCS service agent can use the KMS key for encryption
 const stateBucket = new gcp.storage.Bucket("pulumi-state", {
     name: `${projectId}-pulumi-state`,
     location: region,
@@ -64,7 +76,7 @@ const stateBucket = new gcp.storage.Bucket("pulumi-state", {
         condition: { numNewerVersions: 30 },
     }],
     labels: commonLabels,
-}, { dependsOn: [storageApi] });
+}, { dependsOn: [storageApi, gcsKmsBinding] });
 
 // Service Account for CI/CD deployments (used with Workload Identity Federation)
 const deployServiceAccount = new gcp.serviceaccount.Account("deploy-sa", {
@@ -85,16 +97,6 @@ const stateBucketIamBinding = new gcp.storage.BucketIAMBinding("deploy-sa-bucket
     bucket: stateBucket.name,
     role: "roles/storage.objectAdmin",
     members: [pulumi.interpolate`serviceAccount:${deployServiceAccount.email}`],
-});
-
-// Grant GCS service agent permission to use the KMS key for bucket encryption
-const projectNumber = gcp.organizations.getProjectOutput({ projectId });
-const gcsServiceAgent = pulumi.interpolate`serviceAccount:service-${projectNumber.number}@gs-project-accounts.iam.gserviceaccount.com`;
-
-const gcsKmsBinding = new gcp.kms.CryptoKeyIAMBinding("gcs-sa-kms-binding", {
-    cryptoKeyId: cryptoKey.id,
-    role: "roles/cloudkms.cryptoKeyEncrypterDecrypter",
-    members: [gcsServiceAgent],
 });
 
 // Outputs

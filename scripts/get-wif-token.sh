@@ -31,7 +31,7 @@ if [ -z "$SERVICE_ACCOUNT_EMAIL" ]; then
 fi
 
 # Defaults
-WIF_POOL_ID="${WIF_POOL_ID:-bitbucket-deployments}"
+WIF_POOL_ID="${WIF_POOL_ID:-cicd-deployments}"
 WIF_PROVIDER_ID="${WIF_PROVIDER_ID:-bitbucket}"
 
 # Construct the audience
