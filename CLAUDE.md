@@ -1,4 +1,4 @@
-# CLAUDE.md - pulumi-gcp-ops
+# CLAUDE.md - devops-gcp-pulumi
 
 ## Overview
 
@@ -80,7 +80,7 @@ artifactregistry.versions.delete, artifactregistry.versions.get, artifactregistr
 For apps with backend resources (Firestore, Secret Manager, etc.):
 
 1. App repo creates its own runtime SA with required permissions
-2. App pipeline passes `runtimeServiceAccountEmail` to pulumi-gcp-ops app stack
+2. App pipeline passes `runtimeServiceAccountEmail` to devops-gcp-pulumi app stack
 3. Cloud Run service runs as the runtime SA
 4. Deploy SA only assigns the runtime SA (via `roles/iam.serviceAccountUser`)
 
@@ -95,7 +95,7 @@ pulumi config set runtimeServiceAccountEmail git-monitor-app@project.iam.gservic
 
 ## Comparison with devops-cloud-run
 
-| Aspect | devops-cloud-run | pulumi-gcp-ops |
+| Aspect | devops-cloud-run | devops-gcp-pulumi |
 |--------|------------------|----------------|
 | IaC Tool | Terraform (HCL) | Pulumi (TypeScript) |
 | Auth Method | Service Account Key (JSON) | Workload Identity Federation (OIDC) |
@@ -242,12 +242,14 @@ cd ../app && npx tsc --noEmit
 | File | Purpose |
 |------|---------|
 | `bootstrap/index.ts` | GCS bucket, KMS key, deploy SA |
-| `infrastructure/index.ts` | Artifact Registry, WIF, role grants |
+| `infrastructure/index.ts` | Artifact Registry, WIF (Bitbucket + GitHub), role grants |
 | `infrastructure/roles.ts` | Custom IAM role definitions |
 | `app/index.ts` | Cloud Run service, optional runtime SA |
 | `scripts/normalize-branch.sh` | Branch name → DNS-safe label |
 | `scripts/get-wif-token.sh` | Bitbucket OIDC → GCP access token |
-| `bitbucket-pipelines.yml` | Example pipeline for client apps |
+| `bitbucket-pipelines.yml` | Example Bitbucket pipeline for client apps |
+| `.github/workflows/deploy.yml` | Example GitHub Actions workflow for client apps |
+| `.github/workflows/cleanup.yml` | GitHub Actions cleanup for deleted branches |
 
 ## App Stack Configuration
 
@@ -266,7 +268,25 @@ cd ../app && npx tsc --noEmit
 | `healthCheckPath` | No | /health | Health check endpoint |
 | `runtimeServiceAccountEmail` | No | - | Runtime SA for apps with backend |
 
-## CI/CD Variables for Client Apps
+## CI/CD Configuration
+
+Supports both **Bitbucket Pipelines** and **GitHub Actions**. The Pulumi code is agnostic.
+
+### Infrastructure Setup
+
+```bash
+# For Bitbucket only
+pulumi config set bitbucketWorkspaceUuid "{YOUR-WORKSPACE-UUID}"
+
+# For GitHub only
+pulumi config set githubOwner "your-org-or-username"
+
+# For both (run both commands)
+pulumi config set bitbucketWorkspaceUuid "{YOUR-WORKSPACE-UUID}"
+pulumi config set githubOwner "your-org-or-username"
+```
+
+### Bitbucket Pipeline Variables
 
 | Variable | Description | Secured? |
 |----------|-------------|----------|
@@ -277,3 +297,21 @@ cd ../app && npx tsc --noEmit
 | `SERVICE_ACCOUNT_EMAIL` | Deploy SA email | No |
 | `PULUMI_ORG` | Pulumi organization/username | No |
 | `PULUMI_CONFIG_PASSPHRASE` | State encryption passphrase | Yes |
+
+### GitHub Actions Secrets/Variables
+
+**Secrets:**
+| Secret | Description |
+|--------|-------------|
+| `GCP_PROJECT` | GCP project ID |
+| `GCP_REGION` | GCP region |
+| `STATE_BUCKET` | GCS bucket for Pulumi state |
+| `PULUMI_ORG` | Pulumi organization/username |
+| `PULUMI_CONFIG_PASSPHRASE` | State encryption passphrase |
+
+**Variables:**
+| Variable | Description |
+|----------|-------------|
+| `WIF_PROVIDER` | Full WIF provider path (from `pulumi stack output githubWifProvider`) |
+| `SERVICE_ACCOUNT` | Deploy SA email |
+| `APP_NAME` | Application name prefix |

@@ -1,0 +1,210 @@
+# Example GitHub Actions workflow for client applications using devops-gcp-pulumi
+#
+# Copy this file to your application repository's .github/workflows/ directory.
+#
+# Required Repository Secrets:
+#   GCP_PROJECT              - GCP project ID
+#   GCP_REGION               - GCP region (e.g., us-central1)
+#   STATE_BUCKET             - GCS bucket name for Pulumi state
+#   PULUMI_ORG               - Pulumi organization/username
+#   PULUMI_CONFIG_PASSPHRASE - State encryption passphrase
+#
+# Required Repository Variables:
+#   WIF_PROVIDER             - Full WIF provider path (from infrastructure output)
+#   SERVICE_ACCOUNT          - Deploy service account email
+#   APP_NAME                 - Application name prefix
+#
+# Optional Repository Variables:
+#   CPU_LIMIT                - CPU limit (default: 1)
+#   MEMORY_LIMIT             - Memory limit (default: 512Mi)
+#   MIN_INSTANCES            - Minimum instances (default: 0)
+#   MAX_INSTANCES            - Maximum instances (default: 100)
+#   RUNTIME_SERVICE_ACCOUNT_EMAIL - Runtime SA for apps with backend resources
+#
+# =============================================================================
+# Apps with Backend Resources (Firestore, Firebase, Secret Manager, etc.)
+# =============================================================================
+#
+# For stateless apps: No additional setup needed.
+#
+# For apps with backend resources in a separate GCP project:
+#
+#   1. Create runtime SA in your app's GCP project with required permissions:
+#      gcloud iam service-accounts create app-runtime \
+#        --project=APP-PROJECT \
+#        --display-name="App Runtime Account"
+#
+#   2. Grant runtime SA access to your backend resources:
+#      gcloud projects add-iam-policy-binding APP-PROJECT \
+#        --member="serviceAccount:app-runtime@APP-PROJECT.iam.gserviceaccount.com" \
+#        --role="roles/datastore.user"  # Firestore
+#
+#   3. Grant deploy SA permission to assign the runtime SA to Cloud Run:
+#      gcloud iam service-accounts add-iam-policy-binding \
+#        app-runtime@APP-PROJECT.iam.gserviceaccount.com \
+#        --member="serviceAccount:pulumi-deploy@INFRA-PROJECT.iam.gserviceaccount.com" \
+#        --role="roles/iam.serviceAccountUser"
+#
+#   4. Set RUNTIME_SERVICE_ACCOUNT_EMAIL in repository variables
+#
+# The Cloud Run service deploys to the infra project but runs as the runtime SA,
+# which has cross-project access to your app's backend resources.
+# =============================================================================
+
+name: Deploy to Cloud Run
+
+on:
+  push:
+    branches: ['**']
+  workflow_dispatch:
+
+# Required for OIDC token
+permissions:
+  contents: read
+  id-token: write
+
+env:
+  PULUMI_CONFIG_PASSPHRASE: ${{ secrets.PULUMI_CONFIG_PASSPHRASE }}
+
+jobs:
+  deploy:
+    name: Deploy to Cloud Run
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout app repository
+        uses: actions/checkout@v4
+
+      - name: Validate required secrets and variables
+        run: |
+          MISSING=""
+          [ -z "${{ secrets.GCP_PROJECT }}" ] && MISSING="$MISSING GCP_PROJECT"
+          [ -z "${{ secrets.GCP_REGION }}" ] && MISSING="$MISSING GCP_REGION"
+          [ -z "${{ secrets.STATE_BUCKET }}" ] && MISSING="$MISSING STATE_BUCKET"
+          [ -z "${{ secrets.PULUMI_ORG }}" ] && MISSING="$MISSING PULUMI_ORG"
+          [ -z "${{ secrets.PULUMI_CONFIG_PASSPHRASE }}" ] && MISSING="$MISSING PULUMI_CONFIG_PASSPHRASE"
+          [ -z "${{ vars.WIF_PROVIDER }}" ] && MISSING="$MISSING WIF_PROVIDER"
+          [ -z "${{ vars.SERVICE_ACCOUNT }}" ] && MISSING="$MISSING SERVICE_ACCOUNT"
+          [ -z "${{ vars.APP_NAME }}" ] && MISSING="$MISSING APP_NAME"
+          if [ -n "$MISSING" ]; then
+            echo "=============================================="
+            echo "ERROR: Missing required secrets/variables:"
+            echo "=============================================="
+            for var in $MISSING; do
+              echo "  - $var"
+            done
+            echo ""
+            echo "Set secrets in: Settings > Secrets and variables > Actions > Secrets"
+            echo "Set variables in: Settings > Secrets and variables > Actions > Variables"
+            exit 1
+          fi
+          echo "All required secrets and variables are set"
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Authenticate to Google Cloud
+        id: auth
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.WIF_PROVIDER }}
+          service_account: ${{ vars.SERVICE_ACCOUNT }}
+          token_format: access_token
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to Artifact Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ secrets.GCP_REGION }}-docker.pkg.dev
+          username: oauth2accesstoken
+          password: ${{ steps.auth.outputs.access_token }}
+
+      - name: Clone infrastructure repo
+        run: git clone https://github.com/${{ github.repository_owner }}/devops-gcp-pulumi.git infra
+
+      - name: Normalize branch name
+        id: branch
+        run: |
+          BRANCH_TAG=$(./infra/scripts/normalize-branch.sh "${{ github.ref_name }}")
+          echo "tag=$BRANCH_TAG" >> $GITHUB_OUTPUT
+          echo "Deploying branch '${{ github.ref_name }}' as '$BRANCH_TAG'"
+
+      - name: Get registry URL from infrastructure stack
+        id: registry
+        run: |
+          cd infra/infrastructure
+          npm ci --silent
+          npx pulumi login "gs://${{ secrets.STATE_BUCKET }}"
+          REGISTRY_URL=$(npx pulumi stack output registryUrl -s ${{ secrets.PULUMI_ORG }}/infrastructure/prod --show-secrets 2>/dev/null)
+          echo "url=$REGISTRY_URL" >> $GITHUB_OUTPUT
+          echo "Registry URL: $REGISTRY_URL"
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: true
+          platforms: linux/amd64
+          tags: ${{ steps.registry.outputs.url }}/${{ vars.APP_NAME }}:${{ steps.branch.outputs.tag }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Deploy to Cloud Run via Pulumi
+        run: |
+          cd infra/app
+          npm ci --silent
+
+          # Select or create stack
+          npx pulumi stack select "${{ secrets.PULUMI_ORG }}/app/${{ vars.APP_NAME }}-${{ steps.branch.outputs.tag }}" --create 2>/dev/null || true
+
+          # Required configuration
+          npx pulumi config set gcp:project "${{ secrets.GCP_PROJECT }}"
+          npx pulumi config set appName "${{ vars.APP_NAME }}"
+          npx pulumi config set imageTag "${{ steps.branch.outputs.tag }}"
+          npx pulumi config set infraStackRef "${{ secrets.PULUMI_ORG }}/infrastructure/prod"
+          npx pulumi config set region "${{ secrets.GCP_REGION }}"
+
+          # Optional configuration
+          if [ -n "${{ vars.CPU_LIMIT }}" ]; then
+            npx pulumi config set cpuLimit "${{ vars.CPU_LIMIT }}"
+          fi
+          if [ -n "${{ vars.MEMORY_LIMIT }}" ]; then
+            npx pulumi config set memoryLimit "${{ vars.MEMORY_LIMIT }}"
+          fi
+          if [ -n "${{ vars.MIN_INSTANCES }}" ]; then
+            npx pulumi config set minInstances "${{ vars.MIN_INSTANCES }}"
+          fi
+          if [ -n "${{ vars.MAX_INSTANCES }}" ]; then
+            npx pulumi config set maxInstances "${{ vars.MAX_INSTANCES }}"
+          fi
+          if [ -n "${{ vars.RUNTIME_SERVICE_ACCOUNT_EMAIL }}" ]; then
+            npx pulumi config set runtimeServiceAccountEmail "${{ vars.RUNTIME_SERVICE_ACCOUNT_EMAIL }}"
+          fi
+
+          npx pulumi up --yes
+
+      - name: Get deployment URL
+        id: url
+        run: |
+          cd infra/app
+          URL=$(npx pulumi stack output url --show-secrets 2>/dev/null)
+          echo "url=$URL" >> $GITHUB_OUTPUT
+          echo "Deployed to: $URL"
+
+      - name: Health check
+        run: |
+          echo "Running health check..."
+          for i in {1..6}; do
+            if curl -sf "${{ steps.url.outputs.url }}/health" > /dev/null 2>&1; then
+              echo "Health check passed!"
+              exit 0
+            fi
+            echo "Attempt $i/6 failed, retrying in 10s..."
+            sleep 10
+          done
+          echo "Health check failed after 60 seconds"
+          exit 1

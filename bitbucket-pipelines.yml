@@ -1,9 +1,9 @@
-# Example Bitbucket Pipeline for client applications using pulumi-gcp-ops
+# Example Bitbucket Pipeline for client applications using devops-gcp-pulumi
 #
 # Copy this file to your application repository and customize as needed.
 #
 # Required Repository Variables:
-#   GCP_PROJECT          - GCP project ID
+#   GCP_PROJECT          - GCP project ID (infra project where Cloud Run deploys)
 #   GCP_PROJECT_NUMBER   - GCP project number (for WIF)
 #   GCP_REGION           - GCP region (e.g., us-central1)
 #   STATE_BUCKET         - GCS bucket name for Pulumi state
@@ -19,6 +19,37 @@
 #   MEMORY_LIMIT         - Memory limit (default: 512Mi)
 #   MIN_INSTANCES        - Minimum instances (default: 0)
 #   MAX_INSTANCES        - Maximum instances (default: 100)
+#   RUNTIME_SERVICE_ACCOUNT_EMAIL - Runtime SA for apps with backend resources
+#
+# =============================================================================
+# Apps with Backend Resources (Firestore, Firebase, Secret Manager, etc.)
+# =============================================================================
+#
+# For stateless apps: No additional setup needed.
+#
+# For apps with backend resources in a separate GCP project:
+#
+#   1. Create runtime SA in your app's GCP project with required permissions:
+#      gcloud iam service-accounts create app-runtime \
+#        --project=APP-PROJECT \
+#        --display-name="App Runtime Account"
+#
+#   2. Grant runtime SA access to your backend resources:
+#      gcloud projects add-iam-policy-binding APP-PROJECT \
+#        --member="serviceAccount:app-runtime@APP-PROJECT.iam.gserviceaccount.com" \
+#        --role="roles/datastore.user"  # Firestore
+#
+#   3. Grant deploy SA permission to assign the runtime SA to Cloud Run:
+#      gcloud iam service-accounts add-iam-policy-binding \
+#        app-runtime@APP-PROJECT.iam.gserviceaccount.com \
+#        --member="serviceAccount:pulumi-deploy@INFRA-PROJECT.iam.gserviceaccount.com" \
+#        --role="roles/iam.serviceAccountUser"
+#
+#   4. Set RUNTIME_SERVICE_ACCOUNT_EMAIL in repository variables
+#
+# The Cloud Run service deploys to the infra project but runs as the runtime SA,
+# which has cross-project access to your app's backend resources.
+# =============================================================================
 
 image: node:22-alpine
 
@@ -37,11 +68,45 @@ definitions:
           - node
           - docker
         script:
+          # Validate required repository variables
+          - |
+            MISSING=""
+            [ -z "$GCP_PROJECT" ] && MISSING="$MISSING GCP_PROJECT"
+            [ -z "$GCP_PROJECT_NUMBER" ] && MISSING="$MISSING GCP_PROJECT_NUMBER"
+            [ -z "$GCP_REGION" ] && MISSING="$MISSING GCP_REGION"
+            [ -z "$STATE_BUCKET" ] && MISSING="$MISSING STATE_BUCKET"
+            [ -z "$SERVICE_ACCOUNT_EMAIL" ] && MISSING="$MISSING SERVICE_ACCOUNT_EMAIL"
+            [ -z "$APP_NAME" ] && MISSING="$MISSING APP_NAME"
+            [ -z "$PULUMI_ORG" ] && MISSING="$MISSING PULUMI_ORG"
+            [ -z "$PULUMI_CONFIG_PASSPHRASE" ] && MISSING="$MISSING PULUMI_CONFIG_PASSPHRASE"
+            if [ -n "$MISSING" ]; then
+              echo "=============================================="
+              echo "ERROR: Missing required repository variables:"
+              echo "=============================================="
+              for var in $MISSING; do
+                echo "  - $var"
+              done
+              echo ""
+              echo "Set these in: Repository Settings > Pipelines > Repository variables"
+              echo ""
+              echo "Required variables (from devops-gcp-pulumi bootstrap/infrastructure outputs):"
+              echo "  GCP_PROJECT          - GCP project ID"
+              echo "  GCP_PROJECT_NUMBER   - GCP project number (for WIF)"
+              echo "  GCP_REGION           - GCP region (e.g., us-central1)"
+              echo "  STATE_BUCKET         - GCS bucket name for Pulumi state"
+              echo "  SERVICE_ACCOUNT_EMAIL - Deploy service account email"
+              echo "  APP_NAME             - Application name prefix"
+              echo "  PULUMI_ORG           - Pulumi organization/username"
+              echo "  PULUMI_CONFIG_PASSPHRASE - State encryption passphrase (secured)"
+              exit 1
+            fi
+            echo "All required variables are set"
+
           # Install dependencies
           - apk add --no-cache git curl jq bash docker-cli
 
           # Clone infrastructure repo
-          - git clone https://bitbucket.org/${BITBUCKET_WORKSPACE}/pulumi-gcp-ops.git infra
+          - git clone https://bitbucket.org/${BITBUCKET_WORKSPACE}/devops-gcp-pulumi.git infra
 
           # Normalize branch name for Cloud Run
           - export BRANCH_TAG=$(./infra/scripts/normalize-branch.sh "$BITBUCKET_BRANCH")
@@ -98,6 +163,9 @@ definitions:
             if [ -n "${MAX_INSTANCES}" ]; then
               npx pulumi config set maxInstances "${MAX_INSTANCES}"
             fi
+            if [ -n "${RUNTIME_SERVICE_ACCOUNT_EMAIL}" ]; then
+              npx pulumi config set runtimeServiceAccountEmail "${RUNTIME_SERVICE_ACCOUNT_EMAIL}"
+            fi
 
           - npx pulumi up --yes
 
@@ -121,11 +189,40 @@ definitions:
         name: Cleanup Branch Resources
         oidc: true
         script:
+          # Validate required variables
+          - |
+            MISSING=""
+            [ -z "$DELETED_BRANCH" ] && MISSING="$MISSING DELETED_BRANCH"
+            [ -z "$GCP_PROJECT" ] && MISSING="$MISSING GCP_PROJECT"
+            [ -z "$GCP_PROJECT_NUMBER" ] && MISSING="$MISSING GCP_PROJECT_NUMBER"
+            [ -z "$GCP_REGION" ] && MISSING="$MISSING GCP_REGION"
+            [ -z "$STATE_BUCKET" ] && MISSING="$MISSING STATE_BUCKET"
+            [ -z "$SERVICE_ACCOUNT_EMAIL" ] && MISSING="$MISSING SERVICE_ACCOUNT_EMAIL"
+            [ -z "$APP_NAME" ] && MISSING="$MISSING APP_NAME"
+            [ -z "$PULUMI_ORG" ] && MISSING="$MISSING PULUMI_ORG"
+            [ -z "$PULUMI_CONFIG_PASSPHRASE" ] && MISSING="$MISSING PULUMI_CONFIG_PASSPHRASE"
+            if [ -n "$MISSING" ]; then
+              echo "=============================================="
+              echo "ERROR: Missing required variables:"
+              echo "=============================================="
+              for var in $MISSING; do
+                echo "  - $var"
+              done
+              echo ""
+              if echo "$MISSING" | grep -q "DELETED_BRANCH"; then
+                echo "DELETED_BRANCH: Go to Pipelines -> Run pipeline -> Custom: cleanup-branch"
+                echo "                Then enter the branch name to clean up"
+                echo ""
+              fi
+              echo "Repository variables: Settings > Pipelines > Repository variables"
+              exit 1
+            fi
+
           # Install dependencies
           - apk add --no-cache git curl jq bash
 
           # Clone infrastructure repo
-          - git clone https://bitbucket.org/${BITBUCKET_WORKSPACE}/pulumi-gcp-ops.git infra
+          - git clone https://bitbucket.org/${BITBUCKET_WORKSPACE}/devops-gcp-pulumi.git infra
 
           # Normalize the deleted branch name
           - export BRANCH_TAG=$(./infra/scripts/normalize-branch.sh "$DELETED_BRANCH")

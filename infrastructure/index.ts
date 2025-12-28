@@ -8,7 +8,15 @@ const gcpConfig = new pulumi.Config("gcp");
 const projectId = gcpConfig.require("project");
 const region = config.get("region") || "us-central1";
 const deployServiceAccountEmail = config.require("deployServiceAccountEmail");
-const bitbucketWorkspaceUuid = config.require("bitbucketWorkspaceUuid");
+
+// CI/CD provider configuration (at least one required)
+const bitbucketWorkspaceUuid = config.get("bitbucketWorkspaceUuid");
+const githubOwner = config.get("githubOwner"); // GitHub org or username
+
+// Validate at least one provider is configured
+if (!bitbucketWorkspaceUuid && !githubOwner) {
+    throw new Error("At least one CI/CD provider must be configured: set bitbucketWorkspaceUuid or githubOwner");
+}
 
 // Common labels for all resources
 const commonLabels = {
@@ -47,31 +55,56 @@ const registry = new gcp.artifactregistry.Repository("apps-docker", {
     labels: commonLabels,
 }, { dependsOn: [artifactRegistryApi] });
 
-// Workload Identity Pool for Bitbucket OIDC
-const wifPool = new gcp.iam.WorkloadIdentityPool("bitbucket-pool", {
-    workloadIdentityPoolId: "bitbucket-deployments",
-    displayName: "Bitbucket Deployments",
-    description: "Workload Identity Pool for Bitbucket Pipelines OIDC authentication",
+// Workload Identity Pool for CI/CD OIDC authentication
+const wifPool = new gcp.iam.WorkloadIdentityPool("cicd-pool", {
+    workloadIdentityPoolId: "cicd-deployments",
+    displayName: "CI/CD Deployments",
+    description: "Workload Identity Pool for CI/CD pipeline OIDC authentication",
 }, { dependsOn: [iamCredentialsApi, stsApi] });
 
-// Workload Identity Provider (Bitbucket OIDC issuer)
-const wifProvider = new gcp.iam.WorkloadIdentityPoolProvider("bitbucket-provider", {
-    workloadIdentityPoolId: wifPool.workloadIdentityPoolId,
-    workloadIdentityPoolProviderId: "bitbucket",
-    displayName: "Bitbucket OIDC Provider",
-    description: "OIDC provider for Bitbucket Pipelines",
-    oidc: {
-        issuerUri: `https://api.bitbucket.org/2.0/workspaces/${bitbucketWorkspaceUuid}/pipelines-config/identity/oidc`,
-    },
-    attributeMapping: {
-        "google.subject": "assertion.sub",
-        "attribute.repository_uuid": "assertion.repositoryUuid",
-        "attribute.workspace_uuid": "assertion.workspaceUuid",
-        "attribute.pipeline_uuid": "assertion.pipelineUuid",
-        "attribute.step_uuid": "assertion.stepUuid",
-    },
-    attributeCondition: `assertion.workspaceUuid == "${bitbucketWorkspaceUuid}"`,
-});
+// Bitbucket WIF Provider (conditional)
+let bitbucketProvider: gcp.iam.WorkloadIdentityPoolProvider | undefined;
+if (bitbucketWorkspaceUuid) {
+    bitbucketProvider = new gcp.iam.WorkloadIdentityPoolProvider("bitbucket-provider", {
+        workloadIdentityPoolId: wifPool.workloadIdentityPoolId,
+        workloadIdentityPoolProviderId: "bitbucket",
+        displayName: "Bitbucket OIDC Provider",
+        description: "OIDC provider for Bitbucket Pipelines",
+        oidc: {
+            issuerUri: `https://api.bitbucket.org/2.0/workspaces/${bitbucketWorkspaceUuid}/pipelines-config/identity/oidc`,
+        },
+        attributeMapping: {
+            "google.subject": "assertion.sub",
+            "attribute.repository_uuid": "assertion.repositoryUuid",
+            "attribute.workspace_uuid": "assertion.workspaceUuid",
+            "attribute.pipeline_uuid": "assertion.pipelineUuid",
+            "attribute.step_uuid": "assertion.stepUuid",
+        },
+        attributeCondition: `assertion.workspaceUuid == "${bitbucketWorkspaceUuid}"`,
+    });
+}
+
+// GitHub WIF Provider (conditional)
+let githubProvider: gcp.iam.WorkloadIdentityPoolProvider | undefined;
+if (githubOwner) {
+    githubProvider = new gcp.iam.WorkloadIdentityPoolProvider("github-provider", {
+        workloadIdentityPoolId: wifPool.workloadIdentityPoolId,
+        workloadIdentityPoolProviderId: "github",
+        displayName: "GitHub OIDC Provider",
+        description: "OIDC provider for GitHub Actions",
+        oidc: {
+            issuerUri: "https://token.actions.githubusercontent.com",
+        },
+        attributeMapping: {
+            "google.subject": "assertion.sub",
+            "attribute.actor": "assertion.actor",
+            "attribute.repository": "assertion.repository",
+            "attribute.repository_owner": "assertion.repository_owner",
+            "attribute.ref": "assertion.ref",
+        },
+        attributeCondition: `assertion.repository_owner == "${githubOwner}"`,
+    });
+}
 
 // IAM binding - allow WIF to impersonate deploy service account
 const wifSaBinding = new gcp.serviceaccount.IAMBinding("wif-sa-binding", {
@@ -115,8 +148,6 @@ export const registryName = registry.name;
 export const registryUrl = pulumi.interpolate`${region}-docker.pkg.dev/${projectId}/${registry.repositoryId}`;
 export const wifPoolId = wifPool.id;
 export const wifPoolName = wifPool.name;
-export const wifProviderId = wifProvider.id;
-export const wifProviderName = wifProvider.name;
 export const deployServiceAccountEmail_ = deployServiceAccountEmail;
 export const projectId_ = projectId;
 export const projectNumber = project.number;
@@ -126,23 +157,53 @@ export const region_ = region;
 export const customRoleCloudRun = customRoles.cloudRunDeploy.name;
 export const customRoleArtifactRegistry = customRoles.artifactRegistry.name;
 
-// Full WIF provider resource name for Bitbucket authentication
-export const wifProviderResourceName = pulumi.interpolate`projects/${project.number}/locations/global/workloadIdentityPools/${wifPool.workloadIdentityPoolId}/providers/${wifProvider.workloadIdentityPoolProviderId}`;
+// Bitbucket-specific outputs (conditional)
+export const bitbucketProviderId = bitbucketProvider?.id;
+export const bitbucketProviderName = bitbucketProvider?.name;
+export const bitbucketWifProvider = bitbucketProvider
+    ? pulumi.interpolate`projects/${project.number}/locations/global/workloadIdentityPools/${wifPool.workloadIdentityPoolId}/providers/bitbucket`
+    : undefined;
 
-// Instructions for client apps
-export const bitbucketPipelineConfig = pulumi.interpolate`
-Infrastructure setup complete!
+// GitHub-specific outputs (conditional)
+export const githubProviderId = githubProvider?.id;
+export const githubProviderName = githubProvider?.name;
+export const githubWifProvider = githubProvider
+    ? pulumi.interpolate`projects/${project.number}/locations/global/workloadIdentityPools/${wifPool.workloadIdentityPoolId}/providers/github`
+    : undefined;
 
+// Instructions for Bitbucket client apps
+export const bitbucketPipelineConfig = bitbucketProvider ? pulumi.interpolate`
+Bitbucket Pipeline Configuration
+================================
 Registry URL: ${region}-docker.pkg.dev/${projectId}/${registry.repositoryId}
-WIF Provider: ${wifProviderResourceName}
+WIF Provider: projects/${project.number}/locations/global/workloadIdentityPools/${wifPool.workloadIdentityPoolId}/providers/bitbucket
 
-Required Bitbucket Repository Variables:
+Required Repository Variables:
   GCP_PROJECT: ${projectId}
   GCP_PROJECT_NUMBER: ${project.number}
   GCP_REGION: ${region}
   STATE_BUCKET: (from bootstrap output)
-  WIF_PROVIDER: ${wifProviderResourceName}
   SERVICE_ACCOUNT_EMAIL: ${deployServiceAccountEmail}
   PULUMI_ORG: (your Pulumi organization/username)
   PULUMI_CONFIG_PASSPHRASE: (secured - your encryption passphrase)
-`;
+` : undefined;
+
+// Instructions for GitHub client apps
+export const githubActionsConfig = githubProvider ? pulumi.interpolate`
+GitHub Actions Configuration
+============================
+Registry URL: ${region}-docker.pkg.dev/${projectId}/${registry.repositoryId}
+WIF Provider: projects/${project.number}/locations/global/workloadIdentityPools/${wifPool.workloadIdentityPoolId}/providers/github
+Service Account: ${deployServiceAccountEmail}
+
+Required Repository Secrets:
+  GCP_PROJECT: ${projectId}
+  GCP_REGION: ${region}
+  STATE_BUCKET: (from bootstrap output)
+  PULUMI_ORG: (your Pulumi organization/username)
+  PULUMI_CONFIG_PASSPHRASE: (your encryption passphrase)
+
+Required Repository Variables:
+  WIF_PROVIDER: projects/${project.number}/locations/global/workloadIdentityPools/${wifPool.workloadIdentityPoolId}/providers/github
+  SERVICE_ACCOUNT: ${deployServiceAccountEmail}
+` : undefined;

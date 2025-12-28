@@ -1,0 +1,100 @@
+# Cleanup workflow for deleted branches
+#
+# This workflow runs when a branch is deleted and destroys the corresponding
+# Cloud Run resources and Pulumi stack.
+#
+# Trigger: Branch deletion (automatic) or manual workflow dispatch
+
+name: Cleanup Branch Resources
+
+on:
+  delete:
+  workflow_dispatch:
+    inputs:
+      branch_name:
+        description: 'Branch name to clean up'
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  id-token: write
+
+env:
+  PULUMI_CONFIG_PASSPHRASE: ${{ secrets.PULUMI_CONFIG_PASSPHRASE }}
+
+jobs:
+  cleanup:
+    name: Cleanup Branch Resources
+    runs-on: ubuntu-latest
+    # Only run for branch deletions, not tag deletions
+    if: github.event_name == 'workflow_dispatch' || github.event.ref_type == 'branch'
+
+    steps:
+      - name: Determine branch name
+        id: branch
+        run: |
+          if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
+            BRANCH="${{ inputs.branch_name }}"
+          else
+            BRANCH="${{ github.event.ref }}"
+          fi
+          echo "name=$BRANCH" >> $GITHUB_OUTPUT
+          echo "Cleaning up resources for branch: $BRANCH"
+
+      - name: Validate required secrets and variables
+        run: |
+          MISSING=""
+          [ -z "${{ secrets.GCP_PROJECT }}" ] && MISSING="$MISSING GCP_PROJECT"
+          [ -z "${{ secrets.STATE_BUCKET }}" ] && MISSING="$MISSING STATE_BUCKET"
+          [ -z "${{ secrets.PULUMI_ORG }}" ] && MISSING="$MISSING PULUMI_ORG"
+          [ -z "${{ secrets.PULUMI_CONFIG_PASSPHRASE }}" ] && MISSING="$MISSING PULUMI_CONFIG_PASSPHRASE"
+          [ -z "${{ vars.WIF_PROVIDER }}" ] && MISSING="$MISSING WIF_PROVIDER"
+          [ -z "${{ vars.SERVICE_ACCOUNT }}" ] && MISSING="$MISSING SERVICE_ACCOUNT"
+          [ -z "${{ vars.APP_NAME }}" ] && MISSING="$MISSING APP_NAME"
+          if [ -n "$MISSING" ]; then
+            echo "ERROR: Missing required secrets/variables: $MISSING"
+            exit 1
+          fi
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.WIF_PROVIDER }}
+          service_account: ${{ vars.SERVICE_ACCOUNT }}
+
+      - name: Clone infrastructure repo
+        run: git clone https://github.com/${{ github.repository_owner }}/devops-gcp-pulumi.git infra
+
+      - name: Normalize branch name
+        id: normalized
+        run: |
+          BRANCH_TAG=$(./infra/scripts/normalize-branch.sh "${{ steps.branch.outputs.name }}")
+          STACK_NAME="${{ vars.APP_NAME }}-$BRANCH_TAG"
+          echo "tag=$BRANCH_TAG" >> $GITHUB_OUTPUT
+          echo "stack=$STACK_NAME" >> $GITHUB_OUTPUT
+          echo "Stack to destroy: $STACK_NAME"
+
+      - name: Destroy Pulumi stack
+        run: |
+          cd infra/app
+          npm ci --silent
+          npx pulumi login "gs://${{ secrets.STATE_BUCKET }}"
+
+          if npx pulumi stack select "${{ secrets.PULUMI_ORG }}/app/${{ steps.normalized.outputs.stack }}" 2>/dev/null; then
+            echo "Stack exists, destroying..."
+            npx pulumi config set gcp:project "${{ secrets.GCP_PROJECT }}"
+            npx pulumi destroy --yes
+            npx pulumi stack rm --yes
+            echo "Stack '${{ steps.normalized.outputs.stack }}' destroyed successfully"
+          else
+            echo "No stack found for '${{ steps.normalized.outputs.stack }}', nothing to clean up"
+          fi
+
+      - name: Summary
+        run: echo "Cleanup complete for branch '${{ steps.branch.outputs.name }}'"

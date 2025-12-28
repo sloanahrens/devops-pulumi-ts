@@ -1,5 +1,5 @@
 {
-  "name": "pulumi-gcp-ops",
+  "name": "devops-gcp-pulumi",
   "version": "1.0.0",
   "description": "Pulumi-based infrastructure for deploying containerized apps to GCP Cloud Run via Bitbucket Pipelines",
   "private": true,

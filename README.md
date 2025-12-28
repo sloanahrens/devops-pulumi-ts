@@ -1,4 +1,4 @@
-# pulumi-gcp-ops
+# devops-gcp-pulumi
 
 Pulumi-based infrastructure for deploying containerized applications to GCP Cloud Run via Bitbucket Pipelines.
 
@@ -35,25 +35,22 @@ pulumi login gs://YOUR_STATE_BUCKET
 pulumi stack init prod
 pulumi config set gcp:project YOUR_PROJECT_ID
 pulumi config set deployServiceAccountEmail pulumi-deploy@YOUR_PROJECT.iam.gserviceaccount.com
-pulumi config set bitbucketWorkspaceUuid "{YOUR-WORKSPACE-UUID}"
+pulumi config set bitbucketWorkspaceUuid "{YOUR-WORKSPACE-UUID}"  # For Bitbucket
+pulumi config set githubOwner "your-org-or-username"              # For GitHub
 pulumi up
 ```
 
-Creates: Artifact Registry, WIF pool/provider, custom IAM roles
+Creates: Artifact Registry, WIF pool/provider (Bitbucket and/or GitHub), custom IAM roles
+
+**Note:** Configure at least one provider. You can enable both for repos that mirror between platforms.
 
 ### 3. Configure App Repository
 
-Copy `bitbucket-pipelines.yml` to your app repo and set these Bitbucket variables:
+**For Bitbucket:** Copy `bitbucket-pipelines.yml` to your app repo.
 
-| Variable | Description |
-|----------|-------------|
-| `GCP_PROJECT` | GCP project ID |
-| `GCP_PROJECT_NUMBER` | GCP project number |
-| `GCP_REGION` | Region (e.g., us-central1) |
-| `STATE_BUCKET` | Pulumi state bucket name |
-| `SERVICE_ACCOUNT_EMAIL` | Deploy SA email |
-| `PULUMI_ORG` | Pulumi org/username |
-| `PULUMI_CONFIG_PASSPHRASE` | State encryption passphrase (secured) |
+**For GitHub:** Copy `.github/workflows/deploy.yml` and `.github/workflows/cleanup.yml` to your app repo.
+
+See [CLAUDE.md](CLAUDE.md) for the full list of required secrets/variables for each platform.
 
 ### 4. Deploy
 
