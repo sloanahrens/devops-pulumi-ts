@@ -4,153 +4,120 @@ Pulumi-based infrastructure for deploying containerized applications to GCP Clou
 
 ## Features
 
-- **Pulumi (TypeScript)** - Modern infrastructure as code
-- **GCP Cloud Run** - Serverless container hosting with scale-to-zero
-- **Bitbucket Pipelines** - CI/CD integration
-- **Workload Identity Federation** - Keyless authentication (no stored secrets)
-- **Per-branch deployments** - Each git branch gets its own Cloud Run service
-- **Automatic cleanup** - Resources destroyed when branches are deleted
-
-## Prerequisites
-
-- Node.js 20+
-- Pulumi CLI
-- gcloud CLI (authenticated)
-- A GCP project with billing enabled
+- **Keyless Authentication** - Workload Identity Federation (no stored secrets)
+- **Minimum Permissions** - Custom IAM roles with only required permissions
+- **Per-Branch Deployments** - Each git branch gets its own Cloud Run service
+- **Automatic Cleanup** - Resources destroyed when branches are deleted
+- **Runtime SA Support** - Apps can use their own service account for backend access
+- **TypeScript** - Full type safety for infrastructure code
 
 ## Quick Start
 
-### 1. Bootstrap (One-time per GCP project)
+### 1. Bootstrap (One-time)
 
 ```bash
 cd bootstrap
-../scripts/bootstrap.sh
-```
-
-This creates:
-- GCS bucket for Pulumi state
-- KMS key for state encryption
-- Deploy service account
-
-### 2. Infrastructure (One-time per GCP project)
-
-```bash
-cd infrastructure
-npm ci
-pulumi login gs://<state-bucket-from-bootstrap>
-pulumi stack select prod --create
+npm install
+pulumi login --local
+pulumi stack init prod
 pulumi config set gcp:project YOUR_PROJECT_ID
-pulumi config set deployServiceAccountEmail <sa-email-from-bootstrap>
-pulumi config set bitbucketWorkspaceUuid YOUR_BITBUCKET_WORKSPACE_UUID
 pulumi up
 ```
 
-This creates:
-- Artifact Registry for Docker images
-- Workload Identity Pool/Provider for Bitbucket OIDC
-- IAM bindings
+Creates: GCS state bucket, KMS key, deploy service account
 
-### 3. Client App Setup
+### 2. Infrastructure (One-time)
 
-1. Copy `bitbucket-pipelines.yml` to your app repository
-2. Configure repository variables in Bitbucket:
+```bash
+cd infrastructure
+npm install
+pulumi login gs://YOUR_STATE_BUCKET
+pulumi stack init prod
+pulumi config set gcp:project YOUR_PROJECT_ID
+pulumi config set deployServiceAccountEmail pulumi-deploy@YOUR_PROJECT.iam.gserviceaccount.com
+pulumi config set bitbucketWorkspaceUuid "{YOUR-WORKSPACE-UUID}"
+pulumi up
+```
+
+Creates: Artifact Registry, WIF pool/provider, custom IAM roles
+
+### 3. Configure App Repository
+
+Copy `bitbucket-pipelines.yml` to your app repo and set these Bitbucket variables:
 
 | Variable | Description |
 |----------|-------------|
 | `GCP_PROJECT` | GCP project ID |
 | `GCP_PROJECT_NUMBER` | GCP project number |
-| `GCP_REGION` | GCP region (e.g., us-central1) |
-| `STATE_BUCKET` | GCS bucket name for Pulumi state |
-| `SERVICE_ACCOUNT_EMAIL` | Deploy service account email |
-| `APP_NAME` | Application name prefix |
-| `PULUMI_ORG` | Pulumi organization/username |
+| `GCP_REGION` | Region (e.g., us-central1) |
+| `STATE_BUCKET` | Pulumi state bucket name |
+| `SERVICE_ACCOUNT_EMAIL` | Deploy SA email |
+| `PULUMI_ORG` | Pulumi org/username |
 | `PULUMI_CONFIG_PASSPHRASE` | State encryption passphrase (secured) |
-
-3. Enable OIDC in your pipeline steps:
-```yaml
-- step:
-    oidc: true
-    # ...
-```
 
 ### 4. Deploy
 
-Push to any branch - the pipeline will:
-1. Build your Docker image
-2. Push to Artifact Registry
-3. Deploy to Cloud Run
-4. Run health checks
+Push to any branch. The pipeline will build, push, and deploy automatically.
 
-## Directory Structure
+## Architecture
 
 ```
-pulumi-gcp-ops/
-├── bootstrap/           # One-time setup (local state)
-├── infrastructure/      # Shared resources (GCS state)
-├── app/                 # Per-branch deployments (GCS state)
-├── scripts/             # Helper scripts
-├── bitbucket-pipelines.yml  # Example pipeline
-└── README.md
+Bootstrap (local)              Infrastructure (GCS)           App (GCS, per-branch)
+├── GCS bucket            →    ├── Artifact Registry     →    ├── Cloud Run service
+├── KMS key                    ├── WIF Pool/Provider          ├── IAM bindings
+└── Deploy SA                  └── Custom IAM roles           └── StackReference
 ```
 
-## Configuration Options
+## Security
 
-The app stack supports these configuration options:
+**Custom IAM roles** replace broad predefined roles:
+- `pulumiCloudRunDeploy` - Only Cloud Run service management
+- `pulumiArtifactRegistry` - Only image push and tag management
+
+**Deploy SA cannot access:**
+- Firestore, Secret Manager, Identity Platform
+- Project-level IAM
+- Any resources outside Cloud Run/Artifact Registry
+
+**For apps with backends:** Pass `runtimeServiceAccountEmail` config to use a dedicated runtime SA with appropriate permissions.
+
+## Multi-Project Support
+
+Same repo works for multiple GCP projects - just create different Pulumi stacks:
+
+```bash
+pulumi stack init project-a && pulumi config set gcp:project project-a
+pulumi stack init project-b && pulumi config set gcp:project project-b
+```
+
+## State & Recovery
+
+| Location | What's Stored | Recovery |
+|----------|---------------|----------|
+| Stack config (`Pulumi.*.yaml`) | Project ID, SA email | Recreate with `pulumi config set` |
+| Bootstrap state (`~/.pulumi/`) | Resource IDs | `pulumi import` or delete/recreate |
+| GCS state | Infra/app state | Restore from bucket versioning |
+
+**The repo is safe to be public** - no secrets are stored in git.
+
+## App Configuration Options
 
 | Config | Default | Description |
 |--------|---------|-------------|
 | `appName` | (required) | Application name |
-| `imageTag` | (required) | Docker image tag (normalized branch name) |
-| `infraStackRef` | (required) | Reference to infrastructure stack |
+| `imageTag` | (required) | Docker image tag |
+| `infraStackRef` | (required) | Infrastructure stack reference |
 | `region` | us-central1 | GCP region |
 | `cpuLimit` | 1 | CPU limit |
 | `memoryLimit` | 512Mi | Memory limit |
-| `minInstances` | 0 | Minimum instances (0 = scale to zero) |
-| `maxInstances` | 100 | Maximum instances |
-| `containerPort` | 8080 | Container port |
-| `allowUnauthenticated` | true | Allow public access |
+| `minInstances` | 0 | Min instances (0 = scale to zero) |
+| `maxInstances` | 100 | Max instances |
 | `healthCheckPath` | /health | Health check endpoint |
+| `runtimeServiceAccountEmail` | - | Runtime SA for apps with backend |
 
-## Branch Cleanup
+## Related
 
-When a branch is deleted, trigger the cleanup pipeline:
+- [devops-cloud-run](https://bitbucket.org/sloanahrens/devops-cloud-run) - Terraform version (being replaced)
+- [azure-container-deployment](https://bitbucket.org/sloanahrens/azure-container-deployment) - Azure equivalent
 
-```bash
-# Manual cleanup
-curl -X POST \
-  -H "Authorization: Bearer ${BITBUCKET_TOKEN}" \
-  "https://api.bitbucket.org/2.0/repositories/${WORKSPACE}/${REPO}/pipelines/" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "target": {
-      "type": "pipeline_ref_target",
-      "ref_name": "main",
-      "ref_type": "branch",
-      "selector": {
-        "type": "custom",
-        "pattern": "cleanup-branch"
-      }
-    },
-    "variables": [
-      {"key": "DELETED_BRANCH", "value": "feature/old-branch"}
-    ]
-  }'
-```
-
-Or configure a webhook to trigger automatically on branch deletion.
-
-## Security
-
-- **No stored secrets** - Uses Workload Identity Federation for authentication
-- **Scoped permissions** - Deploy SA only has necessary roles
-- **State encryption** - Pulumi state encrypted with KMS key
-- **HTTPS only** - Cloud Run services enforce HTTPS
-
-## Related Projects
-
-- [azure-container-deployment](../azure-container-deployment) - Similar pattern for Azure
-- [devops-cloud-run](../devops-cloud-run) - Original Terraform-based approach
-
-## License
-
-MIT
+See [CLAUDE.md](CLAUDE.md) for detailed technical documentation.
