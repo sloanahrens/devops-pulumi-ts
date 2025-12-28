@@ -1,0 +1,57 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+bin/
+*.js
+*.d.ts
+*.js.map
+
+# Pulumi
+.pulumi/
+
+# Bootstrap local state (not stored in GCS)
+bootstrap/.pulumi/
+
+# Stack config files (contain sensitive config)
+Pulumi.*.yaml
+!Pulumi.yaml
+
+# Environment files
+.env
+.env.local
+
+# Prevent accidental secret commits
+*.pem
+*.key
+*.p12
+*.pfx
+*.crt
+*.cer
+credentials.json
+secrets.json
+service-account*.json
+.gcp-key/
+
+# GCP
+.gcloud/
+application_default_credentials.json
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Test coverage
+coverage/
+
+# Logs
+*.log
+npm-debug.log*

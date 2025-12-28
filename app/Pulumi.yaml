@@ -1,0 +1,3 @@
+name: app
+runtime: nodejs
+description: Per-branch Cloud Run deployment stack
