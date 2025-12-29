@@ -1,5 +1,6 @@
 // cli/src/commands/deploy.ts
 import path from "path";
+import fs from "fs";
 import { fileURLToPath } from "url";
 import { validateDeployEnv, formatMissingVarsError, DeployEnvError } from "../lib/validation.js";
 import { normalizeBranch } from "../lib/normalize.js";
@@ -115,12 +116,8 @@ export async function deploy(options: DeployOptions): Promise<void> {
   console.log("Running health check...");
   await healthCheck({ url: `${result.url}/health` });
 
-  // Final output - prominent URL for easy clicking
-  console.log("\n");
-  console.log("=".repeat(60));
-  console.log("  DEPLOYMENT SUCCESSFUL");
-  console.log("=".repeat(60));
-  console.log(`\n  ${result.url}\n`);
-  console.log("=".repeat(60));
-  console.log("\n");
+  // Write URL to file for pipeline to echo as separate step
+  fs.writeFileSync("/tmp/service-url.txt", result.url);
+
+  console.log("\nDeployment successful!\n");
 }
