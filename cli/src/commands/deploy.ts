@@ -23,6 +23,7 @@ export interface DeployOptions {
   runtimeSa?: string;
   port?: number;
   private?: boolean;
+  buildArgsFromEnv?: string;
 }
 
 export async function deploy(options: DeployOptions): Promise<void> {
@@ -37,10 +38,25 @@ export async function deploy(options: DeployOptions): Promise<void> {
   const port = options.port ?? (process.env.CONTAINER_PORT ? parseInt(process.env.CONTAINER_PORT) : 8080);
   const allowUnauthenticated = options.private ? false : (process.env.ALLOW_UNAUTHENTICATED !== "false");
 
+  // Parse build args from environment variables
+  const buildArgs: Record<string, string> = {};
+  if (options.buildArgsFromEnv) {
+    for (const varName of options.buildArgsFromEnv.split(",")) {
+      const trimmed = varName.trim();
+      const value = process.env[trimmed];
+      if (value) {
+        buildArgs[trimmed] = value;
+      }
+    }
+  }
+
   console.log(`\n=== Deploying ${app} (branch: ${branch}) ===\n`);
   console.log(`Resources: memory=${memory}, cpu=${cpu}, minInstances=${minInstances}, maxInstances=${maxInstances}`);
   if (runtimeSa) {
     console.log(`Runtime SA: ${runtimeSa}`);
+  }
+  if (Object.keys(buildArgs).length > 0) {
+    console.log(`Build args: ${Object.keys(buildArgs).join(", ")}`);
   }
   console.log();
 
@@ -109,6 +125,7 @@ export async function deploy(options: DeployOptions): Promise<void> {
     imageName,
     context,
     cacheFrom: pulled ? imageName : undefined,
+    buildArgs: Object.keys(buildArgs).length > 0 ? buildArgs : undefined,
   });
   console.log("Build complete\n");
 

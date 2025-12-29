@@ -55,6 +55,24 @@ describe("docker functions", () => {
         expect.objectContaining({ env: expect.objectContaining({ DOCKER_BUILDKIT: "1" }) })
       );
     });
+
+    it("passes build args when provided", async () => {
+      mockExeca.mockResolvedValueOnce({ stdout: "", stderr: "", exitCode: 0 } as any);
+
+      await dockerBuild({
+        imageName: "us-central1-docker.pkg.dev/proj/repo/app:main",
+        context: "/app",
+        buildArgs: {
+          RESEND_API_KEY: "re_123",
+          CONTACT_EMAIL: "test@example.com",
+        },
+      });
+
+      const callArgs = mockExeca.mock.calls[0][1] as string[];
+      expect(callArgs).toContain("--build-arg");
+      expect(callArgs).toContain("RESEND_API_KEY=re_123");
+      expect(callArgs).toContain("CONTACT_EMAIL=test@example.com");
+    });
   });
 
   describe("dockerPull", () => {

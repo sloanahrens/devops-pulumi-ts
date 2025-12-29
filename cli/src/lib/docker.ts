@@ -11,6 +11,7 @@ export interface DockerBuildParams {
   context: string;
   cacheFrom?: string;
   dockerfile?: string;
+  buildArgs?: Record<string, string>;
 }
 
 /**
@@ -34,13 +35,20 @@ export async function dockerLogin(params: DockerLoginParams): Promise<void> {
  * Build Docker image with BuildKit and cache support.
  */
 export async function dockerBuild(params: DockerBuildParams): Promise<void> {
-  const { imageName, context, cacheFrom, dockerfile } = params;
+  const { imageName, context, cacheFrom, dockerfile, buildArgs } = params;
 
   const args = [
     "build",
     "--platform", "linux/amd64",
     "--build-arg", "BUILDKIT_INLINE_CACHE=1",
   ];
+
+  // Add custom build args
+  if (buildArgs) {
+    for (const [key, value] of Object.entries(buildArgs)) {
+      args.push("--build-arg", `${key}=${value}`);
+    }
+  }
 
   if (cacheFrom) {
     args.push("--cache-from", cacheFrom);

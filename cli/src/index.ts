@@ -23,6 +23,7 @@ program
   .option("--runtime-sa <email>", "Runtime service account email")
   .option("--port <number>", "Container port", parseInt)
   .option("--private", "Require authentication (disable public access)")
+  .option("--build-args-from-env <vars>", "Comma-separated env var names to pass as Docker build args")
   .action(async (options) => {
     try {
       await deploy(options);
