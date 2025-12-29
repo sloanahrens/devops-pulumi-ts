@@ -2,13 +2,13 @@
 
 **Date:** 2025-12-29
 **Status:** Proposed
-**Scope:** Merge `devops-gcp-pulumi` and `azure-container-deployment` into a single multi-cloud framework
+**Scope:** Merge `devops-pulumi-ts` and `azure-container-deployment` into a single multi-cloud framework
 
 ## Context
 
 Two separate repositories exist for deploying containerized applications:
 
-- **devops-gcp-pulumi** (mature): TypeScript CLI, custom IAM roles with minimal permissions, WIF for both Bitbucket and GitHub, per-branch isolation, 10-step deployment pipeline
+- **devops-pulumi-ts** (mature): TypeScript CLI, custom IAM roles with minimal permissions, WIF for both Bitbucket and GitHub, per-branch isolation, 10-step deployment pipeline
 - **azure-container-deployment** (earlier iteration): Same three-tier stack pattern, GitHub OIDC working, 83 tests, but deploy logic lives in workflow YAML, uses broad Azure roles, no Bitbucket support
 
 The goal is a single framework that works for consulting engagements across GCP and Azure, with both Bitbucket and GitHub CI/CD support. Clients clone and customize the repo—they own it after handoff.
@@ -205,7 +205,7 @@ pipelines:
 ## Migration Plan
 
 ### Phase 1: Create unified repo structure
-Use `devops-gcp-pulumi` as the base (more mature). Restructure folders:
+Use `devops-pulumi-ts` as the base (more mature). Restructure folders:
 ```bash
 mkdir gcp azure
 mv bootstrap infrastructure app gcp/

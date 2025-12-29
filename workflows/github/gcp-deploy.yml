@@ -1,4 +1,4 @@
-# Example GitHub Actions workflow for client applications using devops-gcp-pulumi
+# Example GitHub Actions workflow for client applications using devops-pulumi-ts
 #
 # Copy this file to your application repository's .github/workflows/ directory.
 #
@@ -124,7 +124,7 @@ jobs:
           password: ${{ steps.auth.outputs.access_token }}
 
       - name: Clone infrastructure repo
-        run: git clone https://github.com/${{ github.repository_owner }}/devops-gcp-pulumi.git infra
+        run: git clone https://github.com/${{ github.repository_owner }}/devops-pulumi-ts.git infra
 
       - name: Normalize branch name
         id: branch

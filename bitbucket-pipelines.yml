@@ -1,4 +1,4 @@
-# Example Bitbucket Pipeline for client applications using devops-gcp-pulumi
+# Example Bitbucket Pipeline for client applications using devops-pulumi-ts
 #
 # Copy this file to your application repository and customize APP_NAME below.
 # This template uses parallel build+deploy for faster CI/CD.
@@ -93,7 +93,7 @@ definitions:
           - apk add --no-cache git curl bash
           - curl -fsSL https://get.pulumi.com | sh
           - export PATH=$PATH:$HOME/.pulumi/bin
-          - git clone https://bitbucket.org/YOUR_WORKSPACE/devops-gcp-pulumi.git infra
+          - git clone https://bitbucket.org/YOUR_WORKSPACE/devops-pulumi-ts.git infra
           - cd infra/cli && npm ci && npm run build
           # Customize: replace YOUR_APP_NAME, add --port/--memory/--build-args-from-env as needed
           - npx devops-gcp deploy --app YOUR_APP_NAME --branch "$BITBUCKET_BRANCH" --context "$BITBUCKET_CLONE_DIR"
@@ -112,7 +112,7 @@ definitions:
     #       - apk add --no-cache git curl bash
     #       - curl -fsSL https://get.pulumi.com | sh
     #       - export PATH=$PATH:$HOME/.pulumi/bin
-    #       - git clone https://bitbucket.org/YOUR_WORKSPACE/devops-gcp-pulumi.git infra
+    #       - git clone https://bitbucket.org/YOUR_WORKSPACE/devops-pulumi-ts.git infra
     #       - cd infra/cli && npm ci && npm run build
     #       - npx devops-gcp deploy --app YOUR_APP_NAME --branch "$BITBUCKET_BRANCH" --context "$BITBUCKET_CLONE_DIR" --custom-domain your-domain.com
     #       - echo "Service URL - $(cat /tmp/service-url.txt)"
@@ -142,7 +142,7 @@ pipelines:
             - apk add --no-cache git curl bash
             - curl -fsSL https://get.pulumi.com | sh
             - export PATH=$PATH:$HOME/.pulumi/bin
-            - git clone https://bitbucket.org/YOUR_WORKSPACE/devops-gcp-pulumi.git infra
+            - git clone https://bitbucket.org/YOUR_WORKSPACE/devops-pulumi-ts.git infra
             - cd infra/cli && npm ci && npm run build
             # Must match app name from deploy steps
             - npx devops-gcp cleanup --app YOUR_APP_NAME --branch "$DELETED_BRANCH"

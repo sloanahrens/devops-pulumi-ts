@@ -1,4 +1,4 @@
-# Example .dockerignore for applications using devops-gcp-pulumi
+# Example .dockerignore for applications using devops-pulumi-ts
 #
 # Copy this file to your application repository as ".dockerignore"
 # and customize as needed.
@@ -12,7 +12,7 @@ infra
 devops
 devops-cloud-run
 devops-azure-container-apps
-devops-gcp-pulumi
+devops-pulumi-ts
 
 # Dependencies (will be installed fresh in Docker build)
 node_modules

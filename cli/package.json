@@ -1,5 +1,5 @@
 {
-  "name": "@devops-cloud-deploy/cli",
+  "name": "@devops-pulumi-ts/cli",
   "version": "1.0.0",
   "description": "CLI for deploying containerized apps to GCP Cloud Run or Azure Container Apps",
   "type": "module",

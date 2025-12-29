@@ -1,7 +1,7 @@
 {
-  "name": "devops-gcp-pulumi",
+  "name": "devops-pulumi-ts",
   "version": "1.0.0",
-  "description": "Pulumi-based infrastructure for deploying containerized apps to GCP Cloud Run via Bitbucket Pipelines",
+  "description": "Pulumi-based infrastructure for deploying containerized apps to GCP Cloud Run or Azure Container Apps",
   "private": true,
   "scripts": {
     "test": "cd cli && npm test",

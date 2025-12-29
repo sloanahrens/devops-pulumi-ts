@@ -69,7 +69,7 @@ jobs:
           service_account: ${{ vars.SERVICE_ACCOUNT }}
 
       - name: Clone infrastructure repo
-        run: git clone https://github.com/${{ github.repository_owner }}/devops-gcp-pulumi.git infra
+        run: git clone https://github.com/${{ github.repository_owner }}/devops-pulumi-ts.git infra
 
       - name: Normalize branch name
         id: normalized
