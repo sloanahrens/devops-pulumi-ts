@@ -26,16 +26,6 @@
 # self-managed Pulumi state backends (GCS, S3, Azure Blob). You do NOT need
 # a Pulumi Cloud account - the state is stored in your GCS bucket.
 #
-# NOTE: Builder Image
-# -------------------
-# For faster builds, use a custom builder image with git, curl, jq, bash, and
-# Pulumi pre-installed. Build and push using the Dockerfile in builder/:
-#
-#   docker build --platform linux/amd64 -t REGISTRY_URL/pipeline-builder:latest builder/
-#   docker push REGISTRY_URL/pipeline-builder:latest
-#
-# Then replace the image: line in your deploy step with your registry URL.
-#
 # =============================================================================
 # Apps with Backend Resources (Firestore, Firebase, Secret Manager, etc.)
 # =============================================================================
@@ -89,9 +79,6 @@ pipelines:
 
         - step:
             name: Deploy to Cloud Run
-            # Custom builder image - replace with your registry URL
-            # Or use node:22-alpine and uncomment the apk/pulumi install lines below
-            image: YOUR_REGISTRY_URL/pipeline-builder:latest
             oidc: true
             services:
               - docker
@@ -101,6 +88,13 @@ pipelines:
             script:
               # Application configuration - customize for your app
               - export APP_NAME=your-app-name
+
+              # Install dependencies
+              - apk add --no-cache git curl jq bash
+
+              # Install Pulumi CLI
+              - curl -fsSL https://get.pulumi.com | sh
+              - export PATH=$PATH:$HOME/.pulumi/bin
 
               # Validate required repository variables
               - |
@@ -131,11 +125,6 @@ pipelines:
                   exit 1
                 fi
                 echo "All required variables are set"
-
-              # Uncomment these lines if using node:22-alpine instead of builder image:
-              # - apk add --no-cache git curl jq bash
-              # - curl -fsSL https://get.pulumi.com | sh
-              # - export PATH=$PATH:$HOME/.pulumi/bin
 
               # Clone infra repo
               - git clone https://bitbucket.org/YOUR_WORKSPACE/devops-gcp-pulumi.git infra
@@ -214,11 +203,17 @@ pipelines:
             description: "Name of the deleted branch to clean up"
         step:
           name: Cleanup Branch Resources
-          image: YOUR_REGISTRY_URL/pipeline-builder:latest
           oidc: true
           script:
             # Application configuration - must match deploy step
             - export APP_NAME=your-app-name
+
+            # Install dependencies
+            - apk add --no-cache git curl jq bash
+
+            # Install Pulumi CLI
+            - curl -fsSL https://get.pulumi.com | sh
+            - export PATH=$PATH:$HOME/.pulumi/bin
 
             # Validate required variables
             - |
@@ -245,11 +240,6 @@ pipelines:
                 echo "Repository variables: Settings > Pipelines > Repository variables"
                 exit 1
               fi
-
-            # Uncomment if using node:22-alpine instead of builder image:
-            # - apk add --no-cache git curl jq bash
-            # - curl -fsSL https://get.pulumi.com | sh
-            # - export PATH=$PATH:$HOME/.pulumi/bin
 
             # Clone infrastructure repo
             - git clone https://bitbucket.org/YOUR_WORKSPACE/devops-gcp-pulumi.git infra
