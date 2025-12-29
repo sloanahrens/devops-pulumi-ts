@@ -155,13 +155,12 @@ const project = gcp.organizations.getProjectOutput({ projectId });
 
 // Grant Cloud Run service agent permission to pull images from Artifact Registry
 // Cloud Run uses service-{PROJECT_NUMBER}@serverless-robot-prod.iam.gserviceaccount.com
-const cloudRunServiceAgentBinding = new gcp.artifactregistry.RepositoryIamMember("cloudrun-registry-reader", {
+// Using project-level binding (more reliable than repository-level)
+const cloudRunServiceAgentBinding = new gcp.projects.IAMMember("cloudrun-registry-reader", {
     project: projectId,
-    location: region,
-    repository: registry.repositoryId,
     role: "roles/artifactregistry.reader",
     member: pulumi.interpolate`serviceAccount:service-${project.number}@serverless-robot-prod.iam.gserviceaccount.com`,
-}, { dependsOn: [registry, runApi] });
+}, { dependsOn: [runApi] });
 
 // Outputs
 export const registryId = registry.id;
