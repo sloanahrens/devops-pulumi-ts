@@ -114,6 +114,13 @@ export async function deploy(options: DeployOptions): Promise<void> {
   // Step 10: Health check
   console.log("Running health check...");
   await healthCheck({ url: `${result.url}/health` });
-  console.log("\n=== Deployment complete! ===\n");
-  console.log(`URL: ${result.url}`);
+
+  // Final output - prominent URL for easy clicking
+  console.log("\n");
+  console.log("=".repeat(60));
+  console.log("  DEPLOYMENT SUCCESSFUL");
+  console.log("=".repeat(60));
+  console.log(`\n  ${result.url}\n`);
+  console.log("=".repeat(60));
+  console.log("\n");
 }
