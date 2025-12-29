@@ -1,0 +1,56 @@
+# GCP Cloud Run Deploy Pipeline
+# Copy this file to your app repo: bitbucket-pipelines.yml
+
+image: node:22
+
+definitions:
+  caches:
+    npm: ~/.npm
+  services:
+    docker:
+      memory: 2048
+
+pipelines:
+  default:
+    - parallel:
+        - step:
+            name: Build and Test
+            caches:
+              - npm
+            script:
+              - npm ci
+              - npm run build
+              - npm run lint
+              - npm run test
+
+        - step:
+            name: Deploy to Cloud Run
+            oidc: true
+            services:
+              - docker
+            caches:
+              - npm
+            script:
+              - git clone --depth 1 https://x-token-auth:${DEVOPS_REPO_TOKEN}@bitbucket.org/${DEVOPS_REPO}.git infra
+              - cd infra && npm ci
+              - |
+                npx devops-deploy deploy \
+                  --cloud gcp \
+                  --app $APP_NAME \
+                  --branch $BITBUCKET_BRANCH \
+                  --context $BITBUCKET_CLONE_DIR
+              - echo "Deployed to $(cat /tmp/service-url.txt)"
+
+  custom:
+    cleanup:
+      - step:
+          name: Cleanup Branch Resources
+          oidc: true
+          script:
+            - git clone --depth 1 https://x-token-auth:${DEVOPS_REPO_TOKEN}@bitbucket.org/${DEVOPS_REPO}.git infra
+            - cd infra && npm ci
+            - |
+              npx devops-deploy cleanup \
+                --cloud gcp \
+                --app $APP_NAME \
+                --branch $DELETED_BRANCH

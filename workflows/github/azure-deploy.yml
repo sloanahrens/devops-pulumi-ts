@@ -1,0 +1,72 @@
+# Azure Container Apps Deploy Workflow
+# Copy this file to your app repo: .github/workflows/deploy.yml
+
+name: Deploy to Azure
+
+on:
+  push:
+    branches: ['*']
+
+permissions:
+  id-token: write   # Required for OIDC
+  contents: read
+
+# Prevent concurrent deployments to the same branch
+concurrency:
+  group: deploy-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout app code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Setup Pulumi
+        uses: pulumi/actions@v5
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Azure OIDC Login
+        uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Clone infrastructure repo
+        run: |
+          git clone --depth 1 https://github.com/${{ vars.INFRA_REPO }}.git infra
+          cd infra && npm ci
+
+      - name: Deploy to Container Apps
+        working-directory: infra
+        run: |
+          npx devops-deploy deploy \
+            --cloud azure \
+            --app ${{ vars.APP_NAME }} \
+            --branch ${{ github.ref_name }} \
+            --context ${{ github.workspace }}
+        env:
+          AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
+          AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+          AZURE_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+          AZURE_RESOURCE_GROUP: ${{ vars.AZURE_RESOURCE_GROUP }}
+          STATE_STORAGE_ACCOUNT: ${{ vars.STATE_STORAGE_ACCOUNT }}
+          PULUMI_CONFIG_PASSPHRASE: ${{ secrets.PULUMI_CONFIG_PASSPHRASE }}
+
+      - name: Post deployment summary
+        if: success()
+        run: |
+          echo "## Deployment Summary" >> $GITHUB_STEP_SUMMARY
+          echo "- **App:** ${{ vars.APP_NAME }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Branch:** ${{ github.ref_name }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **URL:** $(cat /tmp/service-url.txt)" >> $GITHUB_STEP_SUMMARY

@@ -1,0 +1,73 @@
+# Azure Container Apps Deploy Pipeline
+# Copy this file to your app repo: bitbucket-pipelines.yml
+
+image: node:22
+
+definitions:
+  caches:
+    npm: ~/.npm
+  services:
+    docker:
+      memory: 2048
+
+pipelines:
+  default:
+    - parallel:
+        - step:
+            name: Build and Test
+            caches:
+              - npm
+            script:
+              - npm ci
+              - npm run build
+              - npm run lint
+              - npm run test
+
+        - step:
+            name: Deploy to Container Apps
+            oidc: true
+            services:
+              - docker
+            caches:
+              - npm
+            script:
+              # Install Azure CLI
+              - curl -sL https://aka.ms/InstallAzureCLIDeb | bash
+              # Login with OIDC
+              - |
+                az login --service-principal \
+                  --username $AZURE_CLIENT_ID \
+                  --tenant $AZURE_TENANT_ID \
+                  --federated-token $BITBUCKET_STEP_OIDC_TOKEN
+              - az account set --subscription $AZURE_SUBSCRIPTION_ID
+              # Clone infra and deploy
+              - git clone --depth 1 https://x-token-auth:${DEVOPS_REPO_TOKEN}@bitbucket.org/${DEVOPS_REPO}.git infra
+              - cd infra && npm ci
+              - |
+                npx devops-deploy deploy \
+                  --cloud azure \
+                  --app $APP_NAME \
+                  --branch $BITBUCKET_BRANCH \
+                  --context $BITBUCKET_CLONE_DIR
+              - echo "Deployed to $(cat /tmp/service-url.txt)"
+
+  custom:
+    cleanup:
+      - step:
+          name: Cleanup Branch Resources
+          oidc: true
+          script:
+            - curl -sL https://aka.ms/InstallAzureCLIDeb | bash
+            - |
+              az login --service-principal \
+                --username $AZURE_CLIENT_ID \
+                --tenant $AZURE_TENANT_ID \
+                --federated-token $BITBUCKET_STEP_OIDC_TOKEN
+            - az account set --subscription $AZURE_SUBSCRIPTION_ID
+            - git clone --depth 1 https://x-token-auth:${DEVOPS_REPO_TOKEN}@bitbucket.org/${DEVOPS_REPO}.git infra
+            - cd infra && npm ci
+            - |
+              npx devops-deploy cleanup \
+                --cloud azure \
+                --app $APP_NAME \
+                --branch $DELETED_BRANCH
