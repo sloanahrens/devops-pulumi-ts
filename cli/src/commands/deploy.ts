@@ -4,7 +4,7 @@ import fs from "fs";
 import { fileURLToPath } from "url";
 import { validateDeployEnv, formatMissingVarsError, DeployEnvError } from "../lib/validation.js";
 import { normalizeBranch } from "../lib/normalize.js";
-import { exchangeWifToken } from "../lib/wif.js";
+import { exchangeWifToken } from "../lib/wif/gcp.js";
 import { dockerLogin, dockerBuild, dockerPush, dockerPull } from "../lib/docker.js";
 import { getInfraOutputs, deployApp } from "../lib/pulumi.js";
 import { healthCheck } from "../lib/health.js";
@@ -100,7 +100,7 @@ export async function deploy(options: DeployOptions): Promise<void> {
 
   // Step 4: Get infrastructure outputs
   console.log("Getting infrastructure outputs...");
-  const infraDir = path.resolve(__dirname, "../../../infrastructure");
+  const infraDir = path.resolve(__dirname, "../../../gcp/infrastructure");
   const infraOutputs = await getInfraOutputs({
     stateBucket: env.STATE_BUCKET,
     infraStackRef: "organization/infrastructure/prod",
@@ -141,7 +141,7 @@ export async function deploy(options: DeployOptions): Promise<void> {
 
   // Step 9: Deploy via Pulumi
   console.log("Deploying to Cloud Run...");
-  const appDir = path.resolve(__dirname, "../../../app");
+  const appDir = path.resolve(__dirname, "../../../gcp/app");
 
   // Build config with resource settings
   const config: Record<string, string> = {

@@ -1,6 +1,6 @@
-// cli/src/lib/wif.test.ts
+// cli/src/lib/wif/gcp.test.ts
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { exchangeWifToken, WifTokenError } from "./wif.js";
+import { exchangeWifToken, WifTokenError } from "./gcp.js";
 
 // Mock fetch globally
 const mockFetch = vi.fn();

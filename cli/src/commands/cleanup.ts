@@ -3,7 +3,7 @@ import path from "path";
 import { fileURLToPath } from "url";
 import { validateDeployEnv, formatMissingVarsError, DeployEnvError } from "../lib/validation.js";
 import { normalizeBranch } from "../lib/normalize.js";
-import { exchangeWifToken } from "../lib/wif.js";
+import { exchangeWifToken } from "../lib/wif/gcp.js";
 import { destroyApp } from "../lib/pulumi.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -53,7 +53,7 @@ export async function cleanup(options: CleanupOptions): Promise<void> {
   process.env.GOOGLE_OAUTH_ACCESS_TOKEN = accessToken;
 
   // Step 4: Destroy app
-  const appDir = path.resolve(__dirname, "../../../app");
+  const appDir = path.resolve(__dirname, "../../../gcp/app");
   const destroyed = await destroyApp({
     stateBucket: env.STATE_BUCKET,
     stackName,
