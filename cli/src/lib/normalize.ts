@@ -1,15 +1,15 @@
 import { createHash } from "crypto";
 
 /**
- * Converts branch names to DNS-safe labels for Cloud Run service names.
+ * Converts branch names to DNS-safe labels for container service names.
  *
- * Cloud Run service names must:
+ * Service name requirements:
  * - Start with a letter
  * - Contain only lowercase letters, numbers, and hyphens
- * - Be at most 63 characters
+ * - Be at most maxLength characters (GCP: 63, Azure: 32)
  * - Not end with a hyphen
  */
-export function normalizeBranch(branch: string): string {
+export function normalizeBranch(branch: string, maxLength: number = 63): string {
   // Convert to lowercase, replace non-alphanumeric with hyphens
   let normalized = branch
     .toLowerCase()
@@ -23,10 +23,11 @@ export function normalizeBranch(branch: string): string {
     normalized = `b-${normalized}`;
   }
 
-  // Handle length limit (63 chars max)
-  if (normalized.length > 63) {
+  // Handle length limit
+  if (normalized.length > maxLength) {
     const hash = createHash("md5").update(branch).digest("hex").substring(0, 6);
-    normalized = `${normalized.substring(0, 56)}-${hash}`;
+    const truncateLength = maxLength - 7; // Leave room for "-" + 6-char hash
+    normalized = `${normalized.substring(0, truncateLength)}-${hash}`;
   }
 
   // Final cleanup - ensure no trailing hyphen after truncation

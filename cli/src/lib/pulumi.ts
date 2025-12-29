@@ -5,12 +5,15 @@ export interface InfraOutputsParams {
   stateBucket: string;
   infraStackRef: string;
   workDir: string;
+  azure?: boolean;
 }
 
 export interface InfraOutputs {
   registryUrl: string;
-  projectId: string;
-  region: string;
+  projectId?: string;  // GCP only
+  region?: string;     // GCP only
+  resourceGroupName?: string;  // Azure only
+  environmentId?: string;      // Azure only
 }
 
 export interface DeployAppParams {
@@ -18,6 +21,7 @@ export interface DeployAppParams {
   stackName: string;
   workDir: string;
   config: Record<string, string>;
+  azure?: boolean;
 }
 
 export interface DeployResult {
@@ -29,7 +33,9 @@ export interface DestroyAppParams {
   stateBucket: string;
   stackName: string;
   workDir: string;
-  projectId: string;
+  projectId?: string;  // GCP
+  resourceGroupName?: string;  // Azure
+  azure?: boolean;
 }
 
 /**
@@ -43,10 +49,16 @@ async function installDeps(workDir: string): Promise<void> {
 }
 
 /**
- * Login to Pulumi with GCS backend.
+ * Login to Pulumi backend.
+ * GCP: gs://bucket
+ * Azure: azblob://container?storage_account=name
  */
-async function pulumiLogin(stateBucket: string, workDir: string): Promise<void> {
-  await execa("pulumi", ["login", `gs://${stateBucket}`], {
+async function pulumiLogin(stateBucket: string, workDir: string, azure?: boolean): Promise<void> {
+  const backendUrl = azure
+    ? `azblob://state?storage_account=${stateBucket}`
+    : `gs://${stateBucket}`;
+
+  await execa("pulumi", ["login", backendUrl], {
     cwd: workDir,
     stdio: "inherit",
   });
@@ -56,10 +68,10 @@ async function pulumiLogin(stateBucket: string, workDir: string): Promise<void> 
  * Get outputs from infrastructure stack.
  */
 export async function getInfraOutputs(params: InfraOutputsParams): Promise<InfraOutputs> {
-  const { stateBucket, infraStackRef, workDir } = params;
+  const { stateBucket, infraStackRef, workDir, azure } = params;
 
   await installDeps(workDir);
-  await pulumiLogin(stateBucket, workDir);
+  await pulumiLogin(stateBucket, workDir, azure);
 
   const getOutput = async (name: string): Promise<string> => {
     const result = await execa("pulumi", [
@@ -70,23 +82,31 @@ export async function getInfraOutputs(params: InfraOutputsParams): Promise<Infra
     return result.stdout.trim();
   };
 
-  const [registryUrl, projectId, region] = await Promise.all([
-    getOutput("registryUrl"),
-    getOutput("projectId_"),
-    getOutput("region_"),
-  ]);
-
-  return { registryUrl, projectId, region };
+  if (azure) {
+    const [registryUrl, resourceGroupName, environmentId] = await Promise.all([
+      getOutput("acrLoginServer"),
+      getOutput("resourceGroupName"),
+      getOutput("environmentId"),
+    ]);
+    return { registryUrl, resourceGroupName, environmentId };
+  } else {
+    const [registryUrl, projectId, region] = await Promise.all([
+      getOutput("registryUrl"),
+      getOutput("projectId_"),
+      getOutput("region_"),
+    ]);
+    return { registryUrl, projectId, region };
+  }
 }
 
 /**
  * Deploy app via Pulumi.
  */
 export async function deployApp(params: DeployAppParams): Promise<DeployResult> {
-  const { stateBucket, stackName, workDir, config } = params;
+  const { stateBucket, stackName, workDir, config, azure } = params;
 
   await installDeps(workDir);
-  await pulumiLogin(stateBucket, workDir);
+  await pulumiLogin(stateBucket, workDir, azure);
 
   // Select or create stack
   await execa("pulumi", ["stack", "select", stackName, "--create"], {
@@ -127,10 +147,10 @@ export async function deployApp(params: DeployAppParams): Promise<DeployResult> 
  * Destroy app resources and remove stack.
  */
 export async function destroyApp(params: DestroyAppParams): Promise<boolean> {
-  const { stateBucket, stackName, workDir, projectId } = params;
+  const { stateBucket, stackName, workDir, projectId, azure } = params;
 
   await installDeps(workDir);
-  await pulumiLogin(stateBucket, workDir);
+  await pulumiLogin(stateBucket, workDir, azure);
 
   // Try to select stack
   const selectResult = await execa("pulumi", ["stack", "select", stackName], {
@@ -144,10 +164,14 @@ export async function destroyApp(params: DestroyAppParams): Promise<boolean> {
   }
 
   // Set project config (required for destroy)
-  await execa("pulumi", ["config", "set", "gcp:project", projectId], {
-    cwd: workDir,
-    stdio: "inherit",
-  });
+  if (azure) {
+    // Azure doesn't need project config for destroy
+  } else if (projectId) {
+    await execa("pulumi", ["config", "set", "gcp:project", projectId], {
+      cwd: workDir,
+      stdio: "inherit",
+    });
+  }
 
   // Destroy resources
   await execa("pulumi", ["destroy", "--yes"], {

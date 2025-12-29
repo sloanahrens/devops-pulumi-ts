@@ -1,10 +1,10 @@
 {
-  "name": "@devops-gcp-pulumi/cli",
+  "name": "@devops-cloud-deploy/cli",
   "version": "1.0.0",
-  "description": "CLI for deploying apps to GCP Cloud Run via Pulumi",
+  "description": "CLI for deploying containerized apps to GCP Cloud Run or Azure Container Apps",
   "type": "module",
   "bin": {
-    "devops-gcp": "./dist/index.js"
+    "devops-deploy": "./dist/index.js"
   },
   "scripts": {
     "build": "tsc",

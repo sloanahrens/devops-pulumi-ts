@@ -3,7 +3,8 @@ import { execa } from "execa";
 
 export interface DockerLoginParams {
   registry: string;
-  accessToken: string;
+  accessToken?: string;  // Required for GCP, optional for Azure (uses az acr login)
+  azure?: boolean;
 }
 
 export interface DockerBuildParams {
@@ -15,20 +16,34 @@ export interface DockerBuildParams {
 }
 
 /**
- * Login to Docker registry using access token.
+ * Login to Docker registry.
+ * For GCP: Uses OAuth2 access token
+ * For Azure: Uses `az acr login` which handles token exchange automatically
  */
 export async function dockerLogin(params: DockerLoginParams): Promise<void> {
-  const { registry, accessToken } = params;
+  const { registry, accessToken, azure } = params;
 
-  await execa("docker", [
-    "login",
-    "-u", "oauth2accesstoken",
-    "--password-stdin",
-    `https://${registry}`,
-  ], {
-    input: accessToken,
-    stdio: ["pipe", "inherit", "inherit"],
-  });
+  if (azure) {
+    // Azure: Use az acr login which uses the logged-in Azure identity
+    const acrName = registry.split(".")[0]; // Extract ACR name from login server
+    await execa("az", ["acr", "login", "--name", acrName], {
+      stdio: "inherit",
+    });
+  } else {
+    // GCP: Use OAuth2 access token
+    if (!accessToken) {
+      throw new Error("accessToken is required for GCP docker login");
+    }
+    await execa("docker", [
+      "login",
+      "-u", "oauth2accesstoken",
+      "--password-stdin",
+      `https://${registry}`,
+    ], {
+      input: accessToken,
+      stdio: ["pipe", "inherit", "inherit"],
+    });
+  }
 }
 
 /**
