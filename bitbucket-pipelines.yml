@@ -96,7 +96,7 @@ definitions:
           - git clone https://bitbucket.org/YOUR_WORKSPACE/devops-pulumi-ts.git infra
           - cd infra/cli && npm ci && npm run build
           # Customize: replace YOUR_APP_NAME, add --port/--memory/--build-args-from-env as needed
-          - npx devops-gcp deploy --app YOUR_APP_NAME --branch "$BITBUCKET_BRANCH" --context "$BITBUCKET_CLONE_DIR"
+          - npx devops-deploy deploy --cloud gcp --app YOUR_APP_NAME --branch "$BITBUCKET_BRANCH" --context "$BITBUCKET_CLONE_DIR"
           - echo "Service URL - $(cat /tmp/service-url.txt)"
 
     # Production deploy with custom domain (uncomment and customize for main branch)
@@ -114,7 +114,7 @@ definitions:
     #       - export PATH=$PATH:$HOME/.pulumi/bin
     #       - git clone https://bitbucket.org/YOUR_WORKSPACE/devops-pulumi-ts.git infra
     #       - cd infra/cli && npm ci && npm run build
-    #       - npx devops-gcp deploy --app YOUR_APP_NAME --branch "$BITBUCKET_BRANCH" --context "$BITBUCKET_CLONE_DIR" --custom-domain your-domain.com
+    #       - npx devops-deploy deploy --cloud gcp --app YOUR_APP_NAME --branch "$BITBUCKET_BRANCH" --context "$BITBUCKET_CLONE_DIR" --custom-domain your-domain.com
     #       - echo "Service URL - $(cat /tmp/service-url.txt)"
 
 pipelines:
@@ -145,4 +145,4 @@ pipelines:
             - git clone https://bitbucket.org/YOUR_WORKSPACE/devops-pulumi-ts.git infra
             - cd infra/cli && npm ci && npm run build
             # Must match app name from deploy steps
-            - npx devops-gcp cleanup --app YOUR_APP_NAME --branch "$DELETED_BRANCH"
+            - npx devops-deploy cleanup --cloud gcp --app YOUR_APP_NAME --branch "$DELETED_BRANCH"
