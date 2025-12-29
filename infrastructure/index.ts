@@ -72,6 +72,8 @@ const wifPool = new gcp.iam.WorkloadIdentityPool("cicd-pool", {
 // Note: issuerUri uses workspace SLUG, attributeCondition uses workspace UUID
 let bitbucketProvider: gcp.iam.WorkloadIdentityPoolProvider | undefined;
 if (bitbucketWorkspaceUuid && bitbucketWorkspaceSlug) {
+    // Extract UUID without braces for audience format
+    const uuidWithoutBraces = bitbucketWorkspaceUuid.replace(/[{}]/g, '');
     bitbucketProvider = new gcp.iam.WorkloadIdentityPoolProvider("bitbucket-provider", {
         workloadIdentityPoolId: wifPool.workloadIdentityPoolId,
         workloadIdentityPoolProviderId: "bitbucket",
@@ -79,6 +81,8 @@ if (bitbucketWorkspaceUuid && bitbucketWorkspaceSlug) {
         description: "OIDC provider for Bitbucket Pipelines",
         oidc: {
             issuerUri: `https://api.bitbucket.org/2.0/workspaces/${bitbucketWorkspaceSlug}/pipelines-config/identity/oidc`,
+            // Bitbucket sends audience in format: ari:cloud:bitbucket::workspace/<uuid>
+            allowedAudiences: [`ari:cloud:bitbucket::workspace/${uuidWithoutBraces}`],
         },
         attributeMapping: {
             "google.subject": "assertion.sub",
