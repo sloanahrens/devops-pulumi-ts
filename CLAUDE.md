@@ -245,7 +245,7 @@ npm run typecheck
 | `app/index.ts` | Cloud Run service, optional runtime SA |
 | `cli/` | TypeScript CLI for deploy/cleanup commands |
 | `scripts/bootstrap.sh` | One-time interactive bootstrap script |
-| `bitbucket-pipelines.yml` | Example Bitbucket pipeline for client apps |
+| `bitbucket-pipelines.yml` | Example parallel pipeline with production branch pattern |
 | `.github/workflows/deploy.yml` | Example GitHub Actions workflow for client apps |
 | `.github/workflows/cleanup.yml` | GitHub Actions cleanup for deleted branches |
 
@@ -270,6 +270,24 @@ npm run typecheck
 ## CI/CD Configuration
 
 Supports both **Bitbucket Pipelines** and **GitHub Actions**. The Pulumi code is agnostic.
+
+### Recommended Pipeline Pattern
+
+Client apps should use **parallel build+deploy** for faster CI. See `bitbucket-pipelines.yml` for the full template.
+
+| Step | Purpose | Runs In Parallel |
+|------|---------|------------------|
+| Build and Test | `npm ci && npm run build && npm run lint` | Yes |
+| Deploy to Cloud Run | Build Docker image, push to Artifact Registry, deploy via Pulumi | Yes |
+
+### Common CLI Flags
+
+| Flag | Example | When to Use |
+|------|---------|-------------|
+| `--port` | `--port 3000` | Non-default container port (default: 8080) |
+| `--memory` | `--memory 1Gi` | Apps needing more RAM (default: 512Mi) |
+| `--custom-domain` | `--custom-domain example.com` | Production with custom domain |
+| `--build-args-from-env` | `--build-args-from-env "API_KEY,SECRET"` | Pass env vars as Docker build args |
 
 ### Infrastructure Setup
 

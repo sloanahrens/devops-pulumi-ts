@@ -1,6 +1,7 @@
 # Example Bitbucket Pipeline for client applications using devops-gcp-pulumi
 #
 # Copy this file to your application repository and customize APP_NAME below.
+# This template uses parallel build+deploy for faster CI/CD.
 #
 # Required Repository Variables:
 #   GCP_PROJECT          - GCP project ID (infra project where Cloud Run deploys)
@@ -18,6 +19,12 @@
 #   MIN_INSTANCES        - Minimum instances (default: 0)
 #   MAX_INSTANCES        - Maximum instances (default: 100)
 #   RUNTIME_SERVICE_ACCOUNT_EMAIL - Runtime SA for apps with backend resources
+#
+# CLI Deploy Options:
+#   --port <port>                    - Container port (default: 8080)
+#   --memory <size>                  - Memory limit, e.g., "1Gi" (default: 512Mi)
+#   --custom-domain <domain>         - Map custom domain (production only)
+#   --build-args-from-env "<vars>"   - Pass env vars as Docker build args
 #
 # NOTE: Stack References
 # ----------------------
@@ -63,40 +70,67 @@ definitions:
     docker:
       memory: 2048
 
+  steps:
+    - step: &build-test
+        name: Build and Test
+        caches:
+          - node
+        script:
+          - npm ci
+          - npm run build
+          - npm run lint
+          - npx tsc --noEmit
+
+    - step: &deploy
+        name: Deploy to Cloud Run
+        oidc: true
+        services:
+          - docker
+        caches:
+          - node
+          - docker
+        script:
+          - apk add --no-cache git curl bash
+          - curl -fsSL https://get.pulumi.com | sh
+          - export PATH=$PATH:$HOME/.pulumi/bin
+          - git clone https://bitbucket.org/YOUR_WORKSPACE/devops-gcp-pulumi.git infra
+          - cd infra/cli && npm ci && npm run build
+          # Customize: replace YOUR_APP_NAME, add --port/--memory/--build-args-from-env as needed
+          - npx devops-gcp deploy --app YOUR_APP_NAME --branch "$BITBUCKET_BRANCH" --context "$BITBUCKET_CLONE_DIR"
+          - echo "Service URL - $(cat /tmp/service-url.txt)"
+
+    # Production deploy with custom domain (uncomment and customize for main branch)
+    # - step: &deploy-production
+    #     name: Deploy to Cloud Run (Production)
+    #     oidc: true
+    #     services:
+    #       - docker
+    #     caches:
+    #       - node
+    #       - docker
+    #     script:
+    #       - apk add --no-cache git curl bash
+    #       - curl -fsSL https://get.pulumi.com | sh
+    #       - export PATH=$PATH:$HOME/.pulumi/bin
+    #       - git clone https://bitbucket.org/YOUR_WORKSPACE/devops-gcp-pulumi.git infra
+    #       - cd infra/cli && npm ci && npm run build
+    #       - npx devops-gcp deploy --app YOUR_APP_NAME --branch "$BITBUCKET_BRANCH" --context "$BITBUCKET_CLONE_DIR" --custom-domain your-domain.com
+    #       - echo "Service URL - $(cat /tmp/service-url.txt)"
+
 pipelines:
   default:
     - parallel:
-        - step:
-            name: Build and Test
-            caches:
-              - node
-            script:
-              - npm ci
-              - npm run build
-              - npm run lint
-              - npx tsc --noEmit
+        - step: *build-test
+        - step: *deploy
 
-        - step:
-            name: Deploy to Cloud Run
-            oidc: true
-            services:
-              - docker
-            caches:
-              - node
-              - docker
-            script:
-              # Customize APP_NAME for your application
-              - export APP_NAME=your-app-name
-              - apk add --no-cache git curl bash
-              - curl -fsSL https://get.pulumi.com | sh
-              - export PATH=$PATH:$HOME/.pulumi/bin
-              - git clone https://bitbucket.org/YOUR_WORKSPACE/devops-gcp-pulumi.git infra
-              - cd infra/cli && npm ci && npm run build
-              - npx devops-gcp deploy --app "$APP_NAME" --branch "$BITBUCKET_BRANCH" --context "$BITBUCKET_CLONE_DIR"
-              - echo "Service URL - $(cat /tmp/service-url.txt)"
+  # Uncomment for production branch with custom domain:
+  # branches:
+  #   main:
+  #     - parallel:
+  #         - step: *build-test
+  #         - step: *deploy-production
 
   custom:
-    # Branch cleanup pipeline - triggered manually when a branch is deleted
     branch-cleanup:
       - variables:
           - name: DELETED_BRANCH
@@ -105,11 +139,10 @@ pipelines:
           name: Cleanup Branch Resources
           oidc: true
           script:
-            # Must match APP_NAME from deploy step
-            - export APP_NAME=your-app-name
             - apk add --no-cache git curl bash
             - curl -fsSL https://get.pulumi.com | sh
             - export PATH=$PATH:$HOME/.pulumi/bin
             - git clone https://bitbucket.org/YOUR_WORKSPACE/devops-gcp-pulumi.git infra
             - cd infra/cli && npm ci && npm run build
-            - npx devops-gcp cleanup --app "$APP_NAME" --branch "$DELETED_BRANCH"
+            # Must match app name from deploy steps
+            - npx devops-gcp cleanup --app YOUR_APP_NAME --branch "$DELETED_BRANCH"
