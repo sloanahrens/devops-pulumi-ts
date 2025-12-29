@@ -24,6 +24,7 @@ export interface DeployOptions {
   port?: number;
   private?: boolean;
   buildArgsFromEnv?: string;
+  customDomain?: string;
 }
 
 export async function deploy(options: DeployOptions): Promise<void> {
@@ -37,6 +38,7 @@ export async function deploy(options: DeployOptions): Promise<void> {
   const runtimeSa = options.runtimeSa || process.env.RUNTIME_SERVICE_ACCOUNT;
   const port = options.port ?? (process.env.CONTAINER_PORT ? parseInt(process.env.CONTAINER_PORT) : 8080);
   const allowUnauthenticated = options.private ? false : (process.env.ALLOW_UNAUTHENTICATED !== "false");
+  const customDomain = options.customDomain || process.env.CUSTOM_DOMAIN;
 
   // Parse build args from environment variables
   const buildArgs: Record<string, string> = {};
@@ -54,6 +56,9 @@ export async function deploy(options: DeployOptions): Promise<void> {
   console.log(`Resources: memory=${memory}, cpu=${cpu}, minInstances=${minInstances}, maxInstances=${maxInstances}`);
   if (runtimeSa) {
     console.log(`Runtime SA: ${runtimeSa}`);
+  }
+  if (customDomain) {
+    console.log(`Custom Domain: ${customDomain}`);
   }
   if (Object.keys(buildArgs).length > 0) {
     console.log(`Build args: ${Object.keys(buildArgs).join(", ")}`);
@@ -155,6 +160,9 @@ export async function deploy(options: DeployOptions): Promise<void> {
 
   if (runtimeSa) {
     config.runtimeServiceAccountEmail = runtimeSa;
+  }
+  if (customDomain) {
+    config.customDomain = customDomain;
   }
 
   const result = await deployApp({

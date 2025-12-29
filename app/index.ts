@@ -26,6 +26,10 @@ const cpuThrottling = config.getBoolean("cpuThrottling") ?? true;
 // If not provided, Cloud Run uses the default compute service account
 const runtimeServiceAccountEmail = config.get("runtimeServiceAccountEmail");
 
+// Optional custom domain mapping (e.g., "vibe-code-clean.com")
+// Domain must be verified in GCP before use
+const customDomain = config.get("customDomain");
+
 // Reference shared infrastructure stack
 const infra = new pulumi.StackReference(infraStackRef);
 const registryUrl = infra.requireOutput("registryUrl");
@@ -129,6 +133,26 @@ if (allowUnauthenticated) {
     });
 }
 
+// Custom domain mapping (if configured)
+// Note: Domain must be verified in GCP before use
+// The mapping will be created with forceOverride to update existing mappings
+let domainMapping: gcp.cloudrun.DomainMapping | undefined;
+if (customDomain) {
+    domainMapping = new gcp.cloudrun.DomainMapping("custom-domain", {
+        location: region,
+        name: customDomain,
+        metadata: {
+            namespace: projectId,
+            labels: commonLabels,
+        },
+        spec: {
+            routeName: service.name,
+            certificateMode: "AUTOMATIC",
+            forceOverride: true, // Override existing mapping if present
+        },
+    });
+}
+
 // Outputs
 export const url = service.statuses.apply(statuses =>
     statuses && statuses[0] ? statuses[0].url : "pending"
@@ -144,6 +168,7 @@ export const appName_ = appName;
 export const imageTag_ = imageTag;
 export const isPublic = allowUnauthenticated;
 export const runtimeServiceAccount = runtimeServiceAccountEmail || "default-compute";
+export const customDomain_ = customDomain || "none";
 
 // Deployment summary
 export const deploymentSummary = pulumi.interpolate`
@@ -155,6 +180,7 @@ Revision: ${latestRevision}
 Image: ${registryUrl}/${appName}:${imageTag}
 Public: ${allowUnauthenticated ? "yes" : "no"}
 Runtime SA: ${runtimeServiceAccountEmail || "default-compute"}
+Custom Domain: ${customDomain || "none"}
 
 Resources:
   CPU: ${cpuLimit}

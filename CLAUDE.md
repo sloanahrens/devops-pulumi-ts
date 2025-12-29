@@ -265,6 +265,7 @@ npm run typecheck
 | `allowUnauthenticated` | No | true | Allow public access |
 | `healthCheckPath` | No | /health | Health check endpoint |
 | `runtimeServiceAccountEmail` | No | - | Runtime SA for apps with backend |
+| `customDomain` | No | - | Custom domain (e.g., "vibe-code-clean.com") |
 
 ## CI/CD Configuration
 
