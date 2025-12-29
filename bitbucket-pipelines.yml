@@ -153,13 +153,16 @@ pipelines:
                 echo "Registry URL: ${REGISTRY_URL}"
                 echo "REGISTRY_URL=${REGISTRY_URL}" >> $BITBUCKET_PIPE_STORAGE_DIR/env_vars
 
-              # Build and push Docker image
+              # Build and push Docker image (with layer caching)
               - |
                 source $BITBUCKET_PIPE_STORAGE_DIR/env_vars
                 cd $BITBUCKET_CLONE_DIR
+                IMAGE="${REGISTRY_URL}/${APP_NAME}:${BRANCH_TAG}"
                 echo "${ACCESS_TOKEN}" | docker login -u oauth2accesstoken --password-stdin "https://${GCP_REGION}-docker.pkg.dev"
-                docker build --platform linux/amd64 -t "${REGISTRY_URL}/${APP_NAME}:${BRANCH_TAG}" .
-                docker push "${REGISTRY_URL}/${APP_NAME}:${BRANCH_TAG}"
+                # Pull existing image for layer caching (ignore errors if first build)
+                docker pull "${IMAGE}" 2>/dev/null || echo "No existing image to cache from (first build)"
+                docker build --platform linux/amd64 --cache-from "${IMAGE}" -t "${IMAGE}" .
+                docker push "${IMAGE}"
 
               # Deploy via Pulumi
               - |
