@@ -33,6 +33,16 @@ export interface DestroyAppParams {
 }
 
 /**
+ * Install npm dependencies in workDir.
+ */
+async function installDeps(workDir: string): Promise<void> {
+  await execa("npm", ["ci", "--silent"], {
+    cwd: workDir,
+    stdio: "inherit",
+  });
+}
+
+/**
  * Login to Pulumi with GCS backend.
  */
 async function pulumiLogin(stateBucket: string, workDir: string): Promise<void> {
@@ -48,6 +58,7 @@ async function pulumiLogin(stateBucket: string, workDir: string): Promise<void> 
 export async function getInfraOutputs(params: InfraOutputsParams): Promise<InfraOutputs> {
   const { stateBucket, infraStackRef, workDir } = params;
 
+  await installDeps(workDir);
   await pulumiLogin(stateBucket, workDir);
 
   const getOutput = async (name: string): Promise<string> => {
@@ -74,6 +85,7 @@ export async function getInfraOutputs(params: InfraOutputsParams): Promise<Infra
 export async function deployApp(params: DeployAppParams): Promise<DeployResult> {
   const { stateBucket, stackName, workDir, config } = params;
 
+  await installDeps(workDir);
   await pulumiLogin(stateBucket, workDir);
 
   // Select or create stack
@@ -117,6 +129,7 @@ export async function deployApp(params: DeployAppParams): Promise<DeployResult> 
 export async function destroyApp(params: DestroyAppParams): Promise<boolean> {
   const { stateBucket, stackName, workDir, projectId } = params;
 
+  await installDeps(workDir);
   await pulumiLogin(stateBucket, workDir);
 
   // Try to select stack

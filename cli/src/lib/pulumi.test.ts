@@ -17,6 +17,8 @@ describe("pulumi functions", () => {
 
   describe("getInfraOutputs", () => {
     it("gets registry URL from infrastructure stack", async () => {
+      // Mock npm ci
+      mockExeca.mockResolvedValueOnce({ exitCode: 0 } as any);
       // Mock login
       mockExeca.mockResolvedValueOnce({ exitCode: 0 } as any);
       // Mock outputs
