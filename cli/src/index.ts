@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import { Command } from "commander";
 import { deploy } from "./commands/deploy.js";
+import { cleanup } from "./commands/cleanup.js";
 
 const program = new Command();
 
@@ -30,8 +31,12 @@ program
   .requiredOption("--app <name>", "Application name")
   .requiredOption("--branch <name>", "Deleted branch name")
   .action(async (options) => {
-    console.log(`Cleanup: ${options.app} (branch: ${options.branch})`);
-    console.log("Not yet implemented");
+    try {
+      await cleanup(options);
+    } catch (error) {
+      console.error("Cleanup failed:", error);
+      process.exit(1);
+    }
   });
 
 program.parse();
