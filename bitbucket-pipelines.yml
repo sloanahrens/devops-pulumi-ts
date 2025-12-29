@@ -26,6 +26,16 @@
 # self-managed Pulumi state backends (GCS, S3, Azure Blob). You do NOT need
 # a Pulumi Cloud account - the state is stored in your GCS bucket.
 #
+# NOTE: Builder Image
+# -------------------
+# For faster builds, use a custom builder image with git, curl, jq, bash, and
+# Pulumi pre-installed. Build and push using the Dockerfile in builder/:
+#
+#   docker build --platform linux/amd64 -t REGISTRY_URL/pipeline-builder:latest builder/
+#   docker push REGISTRY_URL/pipeline-builder:latest
+#
+# Then replace the image: line in your deploy step with your registry URL.
+#
 # =============================================================================
 # Apps with Backend Resources (Firestore, Firebase, Secret Manager, etc.)
 # =============================================================================
@@ -56,6 +66,7 @@
 # which has cross-project access to your app's backend resources.
 # =============================================================================
 
+# Default image for build/test steps
 image: node:22-alpine
 
 definitions:
@@ -78,6 +89,9 @@ pipelines:
 
         - step:
             name: Deploy to Cloud Run
+            # Custom builder image - replace with your registry URL
+            # Or use node:22-alpine and uncomment the apk/pulumi install lines below
+            image: YOUR_REGISTRY_URL/pipeline-builder:latest
             oidc: true
             services:
               - docker
@@ -118,14 +132,13 @@ pipelines:
                 fi
                 echo "All required variables are set"
 
-              # Install dependencies (docker-cli NOT needed - Bitbucket service provides it)
-              - apk add --no-cache git curl jq bash
+              # Uncomment these lines if using node:22-alpine instead of builder image:
+              # - apk add --no-cache git curl jq bash
+              # - curl -fsSL https://get.pulumi.com | sh
+              # - export PATH=$PATH:$HOME/.pulumi/bin
 
-              # Install Pulumi CLI and clone infra repo
-              - |
-                curl -fsSL https://get.pulumi.com | sh
-                export PATH=$PATH:$HOME/.pulumi/bin
-                git clone https://bitbucket.org/YOUR_WORKSPACE/devops-gcp-pulumi.git infra
+              # Clone infra repo
+              - git clone https://bitbucket.org/YOUR_WORKSPACE/devops-gcp-pulumi.git infra
 
               # Normalize branch name for Cloud Run (max 63 chars, DNS-safe)
               - export BRANCH_TAG=$(./infra/scripts/normalize-branch.sh "$BITBUCKET_BRANCH")
@@ -145,7 +158,6 @@ pipelines:
 
               # Get registry URL from infrastructure stack
               - |
-                export PATH=$PATH:$HOME/.pulumi/bin
                 cd infra/infrastructure
                 npm ci --silent
                 pulumi login "gs://${STATE_BUCKET}"
@@ -166,7 +178,6 @@ pipelines:
 
               # Deploy via Pulumi
               - |
-                export PATH=$PATH:$HOME/.pulumi/bin
                 source $BITBUCKET_PIPE_STORAGE_DIR/env_vars
                 cd $BITBUCKET_CLONE_DIR/infra/app
                 npm ci --silent
@@ -180,7 +191,6 @@ pipelines:
 
               # Get deployment URL and run health check
               - |
-                export PATH=$PATH:$HOME/.pulumi/bin
                 cd infra/app
                 URL=$(pulumi stack output url --show-secrets 2>/dev/null)
                 echo "Deployed to ${URL}"
@@ -204,6 +214,7 @@ pipelines:
             description: "Name of the deleted branch to clean up"
         step:
           name: Cleanup Branch Resources
+          image: YOUR_REGISTRY_URL/pipeline-builder:latest
           oidc: true
           script:
             # Application configuration - must match deploy step
@@ -235,14 +246,13 @@ pipelines:
                 exit 1
               fi
 
-            # Install dependencies
-            - apk add --no-cache git curl jq bash
+            # Uncomment if using node:22-alpine instead of builder image:
+            # - apk add --no-cache git curl jq bash
+            # - curl -fsSL https://get.pulumi.com | sh
+            # - export PATH=$PATH:$HOME/.pulumi/bin
 
-            # Install Pulumi CLI and clone infrastructure repo
-            - |
-              curl -fsSL https://get.pulumi.com | sh
-              export PATH=$PATH:$HOME/.pulumi/bin
-              git clone https://bitbucket.org/YOUR_WORKSPACE/devops-gcp-pulumi.git infra
+            # Clone infrastructure repo
+            - git clone https://bitbucket.org/YOUR_WORKSPACE/devops-gcp-pulumi.git infra
 
             # Normalize the deleted branch name
             - export BRANCH_TAG=$(./infra/scripts/normalize-branch.sh "$DELETED_BRANCH")
@@ -257,7 +267,6 @@ pipelines:
 
             # Check if stack exists and destroy
             - |
-              export PATH=$PATH:$HOME/.pulumi/bin
               cd infra/app
               npm ci --silent
               pulumi login "gs://${STATE_BUCKET}"
