@@ -1,0 +1,6 @@
+name: bootstrap
+runtime:
+  name: nodejs
+  options:
+    typescript: true
+description: Bootstrap resources for Pulumi state storage
