@@ -1,22 +1,24 @@
-# devops-gcp-pulumi
+# devops-cloud-deploy
 
-Pulumi-based infrastructure for deploying containerized applications to GCP Cloud Run via Bitbucket Pipelines.
+Unified Pulumi-based infrastructure for deploying containerized applications to **GCP Cloud Run** or **Azure Container Apps**.
 
 ## Features
 
+- **Multi-Cloud** - Single CLI and codebase for GCP and Azure
 - **Keyless Authentication** - Workload Identity Federation (no stored secrets)
-- **Minimum Permissions** - Custom IAM roles with only required permissions
-- **Per-Branch Deployments** - Each git branch gets its own Cloud Run service
+- **Minimum Permissions** - Custom IAM/RBAC roles with only required permissions
+- **Per-Branch Deployments** - Each git branch gets its own service
 - **Automatic Cleanup** - Resources destroyed when branches are deleted
-- **Runtime SA Support** - Apps can use their own service account for backend access
+- **CI/CD Agnostic** - Supports both GitHub Actions and Bitbucket Pipelines
 - **TypeScript** - Full type safety for infrastructure code
 
 ## Quick Start
 
-### 1. Bootstrap (One-time)
+### 1. Bootstrap (One-time per cloud)
 
+**GCP:**
 ```bash
-cd bootstrap
+cd gcp/bootstrap
 npm install
 pulumi login --local
 pulumi stack init prod
@@ -24,63 +26,84 @@ pulumi config set gcp:project YOUR_PROJECT_ID
 pulumi up
 ```
 
-Creates: GCS state bucket, KMS key, deploy service account
-
-### 2. Infrastructure (One-time)
-
+**Azure:**
 ```bash
-cd infrastructure
+cd azure/bootstrap
+npm install
+pulumi login --local
+pulumi stack init prod
+pulumi up
+```
+
+### 2. Infrastructure (One-time per cloud)
+
+**GCP:**
+```bash
+cd gcp/infrastructure
 npm install
 pulumi login gs://YOUR_STATE_BUCKET
 pulumi stack init prod
 pulumi config set gcp:project YOUR_PROJECT_ID
 pulumi config set deployServiceAccountEmail pulumi-deploy@YOUR_PROJECT.iam.gserviceaccount.com
-pulumi config set bitbucketWorkspaceUuid "{YOUR-WORKSPACE-UUID}"  # For Bitbucket
-pulumi config set githubOwner "your-org-or-username"              # For GitHub
+pulumi config set bitbucketWorkspaceUuid "{YOUR-UUID}"  # For Bitbucket
+pulumi config set githubOwner "your-org"                 # For GitHub
 pulumi up
 ```
 
-Creates: Artifact Registry, WIF pool/provider (Bitbucket and/or GitHub), custom IAM roles
-
-**Note:** Configure at least one provider. You can enable both for repos that mirror between platforms.
+**Azure:**
+```bash
+cd azure/infrastructure
+npm install
+pulumi login azblob://state?storage_account=YOUR_STORAGE_ACCOUNT
+pulumi stack init prod
+pulumi config set githubOrg "your-org"
+pulumi config set githubRepo "your-repo"
+pulumi config set bitbucketWorkspaceUuid "{YOUR-UUID}"   # Optional
+pulumi config set bitbucketWorkspaceSlug "your-workspace" # Optional
+pulumi up
+```
 
 ### 3. Configure App Repository
 
-**For Bitbucket:** Copy `bitbucket-pipelines.yml` to your app repo.
+Copy the appropriate workflow template to your app repo:
 
-**For GitHub:** Copy `.github/workflows/deploy.yml` and `.github/workflows/cleanup.yml` to your app repo.
-
-See [CLAUDE.md](CLAUDE.md) for the full list of required secrets/variables for each platform.
+| Cloud | CI/CD Provider | Template |
+|-------|----------------|----------|
+| GCP | GitHub Actions | `workflows/github/gcp-deploy.yml` |
+| GCP | Bitbucket | `workflows/bitbucket/gcp-pipelines.yml` |
+| Azure | GitHub Actions | `workflows/github/azure-deploy.yml` |
+| Azure | Bitbucket | `workflows/bitbucket/azure-pipelines.yml` |
 
 ### 4. Deploy
 
-Push to any branch. The pipeline will build, push, and deploy automatically.
+Push to any branch. The pipeline builds, pushes, and deploys automatically.
 
 ## CLI
 
-The CLI centralizes deployment logic that would otherwise be duplicated across client pipelines.
-
-### Installation (in CI/CD)
+The unified CLI handles deployments for both clouds:
 
 ```bash
-git clone https://bitbucket.org/your-workspace/devops-gcp-pulumi.git infra
-cd infra/cli && npm ci
+# Deploy to GCP
+npx devops-deploy deploy --cloud gcp --app myapp --branch main
+
+# Deploy to Azure
+npx devops-deploy deploy --cloud azure --app myapp --branch main
+
+# Cleanup (branch deleted)
+npx devops-deploy cleanup --cloud gcp --app myapp --branch feature-123
+npx devops-deploy cleanup --cloud azure --app myapp --branch feature-123
 ```
 
-### Commands
+### Cloud Detection
 
-**Deploy** - Build, push, and deploy to Cloud Run:
-```bash
-npx devops-gcp deploy --app myapp --branch feature-123
-```
-
-**Cleanup** - Destroy resources for a deleted branch:
-```bash
-npx devops-gcp cleanup --app myapp --branch feature-123
-```
+The `--cloud` flag can be omitted if the CLI can auto-detect:
+1. `DEPLOY_CLOUD` environment variable
+2. `GCP_PROJECT` exists → gcp
+3. `AZURE_SUBSCRIPTION_ID` exists → azure
 
 ### Required Environment Variables
 
+**GCP:**
 | Variable | Description |
 |----------|-------------|
 | `GCP_PROJECT` | GCP project ID |
@@ -89,84 +112,89 @@ npx devops-gcp cleanup --app myapp --branch feature-123
 | `STATE_BUCKET` | GCS bucket for Pulumi state |
 | `SERVICE_ACCOUNT_EMAIL` | Deploy service account email |
 | `PULUMI_CONFIG_PASSPHRASE` | State encryption passphrase |
-| `BITBUCKET_STEP_OIDC_TOKEN` | OIDC token (auto-provided by Bitbucket) |
 
-### Client Pipeline Example
-
-With the CLI, a client pipeline shrinks to ~10 lines:
-
-```yaml
-pipelines:
-  branches:
-    '**':
-      - step:
-          name: Deploy
-          oidc: true
-          script:
-            - git clone https://bitbucket.org/your-workspace/devops-gcp-pulumi.git infra
-            - cd infra/cli && npm ci
-            - npx devops-gcp deploy --app $APP_NAME --branch $BITBUCKET_BRANCH
-```
+**Azure:**
+| Variable | Description |
+|----------|-------------|
+| `AZURE_CLIENT_ID` | Managed identity client ID |
+| `AZURE_TENANT_ID` | Azure AD tenant ID |
+| `AZURE_SUBSCRIPTION_ID` | Azure subscription ID |
+| `AZURE_RESOURCE_GROUP` | Resource group name |
+| `STATE_STORAGE_ACCOUNT` | Storage account for Pulumi state |
+| `PULUMI_CONFIG_PASSPHRASE` | State encryption passphrase |
 
 ## Architecture
 
 ```
-Bootstrap (local)              Infrastructure (GCS)           App (GCS, per-branch)
-├── GCS bucket            →    ├── Artifact Registry     →    ├── Cloud Run service
-├── KMS key                    ├── WIF Pool/Provider          ├── IAM bindings
-└── Deploy SA                  └── Custom IAM roles           └── StackReference
+gcp/                              azure/
+├── bootstrap/                    ├── bootstrap/
+│   └── GCS bucket, KMS, SA       │   └── Storage account
+├── infrastructure/               ├── infrastructure/
+│   ├── Artifact Registry         │   ├── ACR
+│   ├── WIF Pool (BB + GH)        │   ├── Container Apps Env
+│   └── Custom IAM roles          │   ├── WIF (BB + GH)
+└── app/                          │   └── Custom RBAC roles
+    └── Cloud Run service         └── app/
+                                      └── Container App
+
+cli/                              workflows/
+├── src/commands/                 ├── github/
+│   ├── deploy.ts                 │   ├── gcp-deploy.yml
+│   └── cleanup.ts                │   ├── gcp-cleanup.yml
+└── src/lib/                      │   ├── azure-deploy.yml
+    ├── wif/gcp.ts                │   └── azure-cleanup.yml
+    ├── wif/azure.ts              └── bitbucket/
+    ├── validation.ts                 ├── gcp-pipelines.yml
+    └── ...                           └── azure-pipelines.yml
 ```
 
 ## Security
 
-**Custom IAM roles** replace broad predefined roles:
+**Custom roles** replace broad predefined roles:
+
+**GCP:**
 - `pulumiCloudRunDeploy` - Only Cloud Run service management
 - `pulumiArtifactRegistry` - Only image push and tag management
 
-**Deploy SA cannot access:**
-- Firestore, Secret Manager, Identity Platform
-- Project-level IAM
-- Any resources outside Cloud Run/Artifact Registry
+**Azure:**
+- `Container Apps Deployer` - Only Container Apps management
+- `Registry Image Pusher` - Only ACR push/pull
 
-**For apps with backends:** Pass `runtimeServiceAccountEmail` config to use a dedicated runtime SA with appropriate permissions.
+**Deploy identity cannot access:** databases, key vaults, project/subscription-level IAM.
 
-## Multi-Project Support
+## Multi-Project/Subscription Support
 
-Same repo works for multiple GCP projects - just create different Pulumi stacks:
+Create different Pulumi stacks for different projects:
 
 ```bash
 pulumi stack init project-a && pulumi config set gcp:project project-a
 pulumi stack init project-b && pulumi config set gcp:project project-b
 ```
 
-## State & Recovery
+## Branch Name Handling
 
-| Location | What's Stored | Recovery |
-|----------|---------------|----------|
-| Stack config (`Pulumi.*.yaml`) | Project ID, SA email | Recreate with `pulumi config set` |
-| Bootstrap state (`~/.pulumi/`) | Resource IDs | `pulumi import` or delete/recreate |
-| GCS state | Infra/app state | Restore from bucket versioning |
+Branch names are normalized for cloud service name constraints:
+- **GCP:** Max 63 characters
+- **Azure:** Max 32 characters
 
-**The repo is safe to be public** - no secrets are stored in git.
+Long branch names are truncated with a hash suffix to avoid collisions.
 
-## App Configuration Options
+## Configuration Options
 
-| Config | Default | Description |
-|--------|---------|-------------|
-| `appName` | (required) | Application name |
-| `imageTag` | (required) | Docker image tag |
-| `infraStackRef` | (required) | Infrastructure stack reference |
-| `region` | us-central1 | GCP region |
-| `cpuLimit` | 1 | CPU limit |
-| `memoryLimit` | 512Mi | Memory limit |
-| `minInstances` | 0 | Min instances (0 = scale to zero) |
-| `maxInstances` | 100 | Max instances |
-| `healthCheckPath` | /health | Health check endpoint |
-| `runtimeServiceAccountEmail` | - | Runtime SA for apps with backend |
+| Option | GCP Default | Azure Default | Description |
+|--------|-------------|---------------|-------------|
+| `--memory` | 512Mi | 2Gi | Memory limit |
+| `--cpu` | 1 | 1 | CPU limit |
+| `--port` | 8080 | 8080 | Container port |
+| `--min-instances` | 0 | 0 | Minimum instances |
+| `--max-instances` | 100 | 100 | Maximum instances |
+| `--private` | false | false | Require authentication |
+| `--custom-domain` | - | - | Custom domain mapping |
 
-## Related
+## Client Handoff
 
-- [devops-cloud-run](https://bitbucket.org/sloanahrens/devops-cloud-run) - Terraform version (being replaced)
-- [azure-container-deployment](https://bitbucket.org/sloanahrens/azure-container-deployment) - Azure equivalent
+For consulting engagements, clients can:
+1. **Delete unused cloud folder** - Keep only `gcp/` or `azure/`
+2. **Keep both** - Flexibility for multi-cloud deployments later
 
 See [CLAUDE.md](CLAUDE.md) for detailed technical documentation.
