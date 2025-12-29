@@ -8,6 +8,8 @@ const resources: Array<{ type: string; name: string; inputs: Record<string, unkn
 pulumi.runtime.setAllConfig({
     "infrastructure:githubOrg": "test-org",
     "infrastructure:githubRepo": "test-repo",
+    "infrastructure:bitbucketWorkspaceUuid": "{test-uuid}",
+    "infrastructure:bitbucketWorkspaceSlug": "test-workspace",
     "infrastructure:location": "eastus",
 });
 
@@ -57,7 +59,6 @@ describe("Infrastructure", () => {
     beforeAll(async () => {
         infra = await import("./index");
         // Wait for all resources to be created by resolving all outputs
-        // This forces Pulumi to evaluate the entire resource graph
         await Promise.all([
             promiseOf(infra.resourceGroupName),
             promiseOf(infra.environmentId),
@@ -108,50 +109,68 @@ describe("Infrastructure", () => {
             expect(identity).toBeDefined();
             expect(identity?.inputs.tags).toMatchObject({
                 managedBy: "pulumi",
-                purpose: "github-actions-deployment",
+                purpose: "cicd-deployment",
             });
+        });
+    });
+
+    describe("Custom RBAC Roles", () => {
+        it("creates Container Apps Deployer custom role", () => {
+            const roles = resources.filter(r => r.type === "azure-native:authorization:RoleDefinition");
+            const containerAppsRole = roles.find(r => r.name === "container-apps-deploy");
+            expect(containerAppsRole).toBeDefined();
+            expect(containerAppsRole?.inputs.roleName).toBe("Container Apps Deployer");
+        });
+
+        it("creates Registry Image Pusher custom role", () => {
+            const roles = resources.filter(r => r.type === "azure-native:authorization:RoleDefinition");
+            const registryRole = roles.find(r => r.name === "registry-pusher");
+            expect(registryRole).toBeDefined();
+            expect(registryRole?.inputs.roleName).toBe("Registry Image Pusher");
         });
     });
 
     describe("OIDC Federation", () => {
         it("creates federated credential for GitHub Actions", () => {
-            const federation = resources.find(r => r.type === "azure-native:managedidentity:FederatedIdentityCredential");
-            expect(federation).toBeDefined();
-            expect(federation?.inputs.issuer).toBe("https://token.actions.githubusercontent.com");
-            expect(federation?.inputs.subject).toContain("test-org/test-repo");
-            expect(federation?.inputs.audiences).toContain("api://AzureADTokenExchange");
+            const federations = resources.filter(r => r.type === "azure-native:managedidentity:FederatedIdentityCredential");
+            const github = federations.find(r => r.name === "github-federation");
+            expect(github).toBeDefined();
+            expect(github?.inputs.issuer).toBe("https://token.actions.githubusercontent.com");
+            expect(github?.inputs.subject).toContain("test-org/test-repo");
+            expect(github?.inputs.audiences).toContain("api://AzureADTokenExchange");
+        });
+
+        it("creates federated credential for Bitbucket Pipelines", () => {
+            const federations = resources.filter(r => r.type === "azure-native:managedidentity:FederatedIdentityCredential");
+            const bitbucket = federations.find(r => r.name === "bitbucket-federation");
+            expect(bitbucket).toBeDefined();
+            expect(bitbucket?.inputs.issuer).toContain("api.bitbucket.org");
+            expect(bitbucket?.inputs.issuer).toContain("test-workspace");
+            expect(bitbucket?.inputs.subject).toBe("{test-uuid}");
         });
     });
 
     describe("Role Assignments", () => {
-        it("creates AcrPush role assignment", () => {
+        it("creates Container Apps Deployer role assignment", () => {
             const roles = resources.filter(r => r.type === "azure-native:authorization:RoleAssignment");
-            const acrPush = roles.find(r => r.name === "acr-push");
-            expect(acrPush).toBeDefined();
+            const containerApps = roles.find(r => r.name === "container-apps-deploy");
+            expect(containerApps).toBeDefined();
         });
 
-        it("scopes AcrPush to the container registry", () => {
+        it("creates Registry Pusher role assignment", () => {
             const roles = resources.filter(r => r.type === "azure-native:authorization:RoleAssignment");
-            const acrPush = roles.find(r => r.name === "acr-push");
-            // Scope should be the ACR resource ID, not subscription
-            expect(acrPush?.inputs.scope).not.toContain("/subscriptions/mock-subscription-id\"");
+            const registry = roles.find(r => r.name === "registry-pusher");
+            expect(registry).toBeDefined();
         });
 
-        it("creates Contributor role assignment", () => {
+        it("scopes role assignments appropriately (not subscription-level)", () => {
             const roles = resources.filter(r => r.type === "azure-native:authorization:RoleAssignment");
-            const contributor = roles.find(r => r.name === "contributor");
-            expect(contributor).toBeDefined();
-        });
-
-        it("scopes Contributor to resource group (not subscription)", () => {
-            const roles = resources.filter(r => r.type === "azure-native:authorization:RoleAssignment");
-            const contributor = roles.find(r => r.name === "contributor");
-            // Security: Contributor should be scoped to RG, not subscription level
-            // Subscription-level scope would be just "/subscriptions/{id}"
-            const scope = contributor?.inputs.scope as string;
-            expect(scope).toBeDefined();
-            // Should NOT be subscription-level (subscription ID only)
-            expect(scope).not.toMatch(/^\/subscriptions\/[^/]+$/);
+            for (const role of roles) {
+                const scope = role?.inputs.scope as string;
+                expect(scope).toBeDefined();
+                // Should NOT be subscription-level (subscription ID only)
+                expect(scope).not.toMatch(/^\/subscriptions\/[^/]+$/);
+            }
         });
     });
 
@@ -169,6 +188,13 @@ describe("Infrastructure", () => {
         it("exports environmentId", async () => {
             const value = await promiseOf(infra.environmentId);
             expect(value).toBeDefined();
+        });
+
+        it("exports custom role IDs", async () => {
+            const containerAppsRoleId = await promiseOf(infra.containerAppsDeployRoleId);
+            const registryRoleId = await promiseOf(infra.registryPusherRoleId);
+            expect(containerAppsRoleId).toBeDefined();
+            expect(registryRoleId).toBeDefined();
         });
     });
 });
