@@ -91,8 +91,9 @@ pipelines:
               - curl -fsSL https://get.pulumi.com | sh
               - export PATH=$PATH:$HOME/.pulumi/bin
               - git clone https://bitbucket.org/YOUR_WORKSPACE/devops-gcp-pulumi.git infra
-              - cd infra/cli && npm ci
+              - cd infra/cli && npm ci && npm run build
               - npx devops-gcp deploy --app "$APP_NAME" --branch "$BITBUCKET_BRANCH" --context "$BITBUCKET_CLONE_DIR"
+              - echo "Service URL - $(cat /tmp/service-url.txt)"
 
   custom:
     # Branch cleanup pipeline - triggered manually when a branch is deleted
@@ -110,5 +111,5 @@ pipelines:
             - curl -fsSL https://get.pulumi.com | sh
             - export PATH=$PATH:$HOME/.pulumi/bin
             - git clone https://bitbucket.org/YOUR_WORKSPACE/devops-gcp-pulumi.git infra
-            - cd infra/cli && npm ci
+            - cd infra/cli && npm ci && npm run build
             - npx devops-gcp cleanup --app "$APP_NAME" --branch "$DELETED_BRANCH"
