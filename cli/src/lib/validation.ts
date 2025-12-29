@@ -6,7 +6,7 @@ const deployEnvSchema = z.object({
   GCP_PROJECT_NUMBER: z.string().min(1),
   GCP_REGION: z.string().min(1),
   STATE_BUCKET: z.string().min(1),
-  SERVICE_ACCOUNT_EMAIL: z.string().email().or(z.string().includes("@")),
+  SERVICE_ACCOUNT_EMAIL: z.string().min(1),
   PULUMI_CONFIG_PASSPHRASE: z.string().min(1),
   BITBUCKET_STEP_OIDC_TOKEN: z.string().min(1),
   // Optional with defaults
