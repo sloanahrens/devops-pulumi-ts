@@ -16,6 +16,13 @@ program
   .requiredOption("--app <name>", "Application name")
   .requiredOption("--branch <name>", "Git branch name")
   .option("--context <path>", "Docker build context", process.cwd())
+  .option("--memory <size>", "Memory limit (e.g., 512Mi, 1Gi)")
+  .option("--cpu <limit>", "CPU limit (e.g., 1, 2)")
+  .option("--min-instances <count>", "Minimum instances", parseInt)
+  .option("--max-instances <count>", "Maximum instances", parseInt)
+  .option("--runtime-sa <email>", "Runtime service account email")
+  .option("--port <number>", "Container port", parseInt)
+  .option("--private", "Require authentication (disable public access)")
   .action(async (options) => {
     try {
       await deploy(options);

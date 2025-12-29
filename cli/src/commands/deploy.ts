@@ -15,12 +15,34 @@ export interface DeployOptions {
   app: string;
   branch: string;
   context?: string;
+  // Resource configuration (flags override env vars override defaults)
+  memory?: string;
+  cpu?: string;
+  minInstances?: number;
+  maxInstances?: number;
+  runtimeSa?: string;
+  port?: number;
+  private?: boolean;
 }
 
 export async function deploy(options: DeployOptions): Promise<void> {
   const { app, branch, context = process.cwd() } = options;
 
+  // Resolve resource config: flag > env var > default
+  const memory = options.memory || process.env.MEMORY_LIMIT || "512Mi";
+  const cpu = options.cpu || process.env.CPU_LIMIT || "1";
+  const minInstances = options.minInstances ?? (process.env.MIN_INSTANCES ? parseInt(process.env.MIN_INSTANCES) : 0);
+  const maxInstances = options.maxInstances ?? (process.env.MAX_INSTANCES ? parseInt(process.env.MAX_INSTANCES) : 100);
+  const runtimeSa = options.runtimeSa || process.env.RUNTIME_SERVICE_ACCOUNT;
+  const port = options.port ?? (process.env.CONTAINER_PORT ? parseInt(process.env.CONTAINER_PORT) : 8080);
+  const allowUnauthenticated = options.private ? false : (process.env.ALLOW_UNAUTHENTICATED !== "false");
+
   console.log(`\n=== Deploying ${app} (branch: ${branch}) ===\n`);
+  console.log(`Resources: memory=${memory}, cpu=${cpu}, minInstances=${minInstances}, maxInstances=${maxInstances}`);
+  if (runtimeSa) {
+    console.log(`Runtime SA: ${runtimeSa}`);
+  }
+  console.log();
 
   // Step 1: Validate environment
   console.log("Validating environment...");
@@ -98,17 +120,31 @@ export async function deploy(options: DeployOptions): Promise<void> {
   // Step 9: Deploy via Pulumi
   console.log("Deploying to Cloud Run...");
   const appDir = path.resolve(__dirname, "../../../app");
+
+  // Build config with resource settings
+  const config: Record<string, string> = {
+    "gcp:project": env.GCP_PROJECT,
+    appName: app,
+    imageTag: branchTag,
+    infraStackRef: "organization/infrastructure/prod",
+    region: env.GCP_REGION,
+    memoryLimit: memory,
+    cpuLimit: cpu,
+    minInstances: String(minInstances),
+    maxInstances: String(maxInstances),
+    containerPort: String(port),
+    allowUnauthenticated: String(allowUnauthenticated),
+  };
+
+  if (runtimeSa) {
+    config.runtimeServiceAccountEmail = runtimeSa;
+  }
+
   const result = await deployApp({
     stateBucket: env.STATE_BUCKET,
     stackName: `organization/app/${app}-${branchTag}`,
     workDir: appDir,
-    config: {
-      "gcp:project": env.GCP_PROJECT,
-      appName: app,
-      imageTag: branchTag,
-      infraStackRef: "organization/infrastructure/prod",
-      region: env.GCP_REGION,
-    },
+    config,
   });
   console.log(`Deployed to ${result.url}\n`);
 

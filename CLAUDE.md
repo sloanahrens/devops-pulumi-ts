@@ -228,13 +228,11 @@ pulumi up
 ## Testing
 
 ```bash
-# Test normalize-branch script
-./scripts/normalize-branch.sh "feature/API-123"  # -> feature-api-123
+# Run CLI tests
+npm test
 
 # Type-check all stacks
-cd bootstrap && npx tsc --noEmit
-cd ../infrastructure && npx tsc --noEmit
-cd ../app && npx tsc --noEmit
+npm run typecheck
 ```
 
 ## Key Files
@@ -245,8 +243,8 @@ cd ../app && npx tsc --noEmit
 | `infrastructure/index.ts` | Artifact Registry, WIF (Bitbucket + GitHub), role grants |
 | `infrastructure/roles.ts` | Custom IAM role definitions |
 | `app/index.ts` | Cloud Run service, optional runtime SA |
-| `scripts/normalize-branch.sh` | Branch name → DNS-safe label |
-| `scripts/get-wif-token.sh` | Bitbucket OIDC → GCP access token |
+| `cli/` | TypeScript CLI for deploy/cleanup commands |
+| `scripts/bootstrap.sh` | One-time interactive bootstrap script |
 | `bitbucket-pipelines.yml` | Example Bitbucket pipeline for client apps |
 | `.github/workflows/deploy.yml` | Example GitHub Actions workflow for client apps |
 | `.github/workflows/cleanup.yml` | GitHub Actions cleanup for deleted branches |
