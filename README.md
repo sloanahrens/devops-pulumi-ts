@@ -56,6 +56,58 @@ See [CLAUDE.md](CLAUDE.md) for the full list of required secrets/variables for e
 
 Push to any branch. The pipeline will build, push, and deploy automatically.
 
+## CLI
+
+The CLI centralizes deployment logic that would otherwise be duplicated across client pipelines.
+
+### Installation (in CI/CD)
+
+```bash
+git clone https://bitbucket.org/your-workspace/devops-gcp-pulumi.git infra
+cd infra/cli && npm ci
+```
+
+### Commands
+
+**Deploy** - Build, push, and deploy to Cloud Run:
+```bash
+npx devops-gcp deploy --app myapp --branch feature-123
+```
+
+**Cleanup** - Destroy resources for a deleted branch:
+```bash
+npx devops-gcp cleanup --app myapp --branch feature-123
+```
+
+### Required Environment Variables
+
+| Variable | Description |
+|----------|-------------|
+| `GCP_PROJECT` | GCP project ID |
+| `GCP_PROJECT_NUMBER` | GCP project number (for WIF) |
+| `GCP_REGION` | GCP region |
+| `STATE_BUCKET` | GCS bucket for Pulumi state |
+| `SERVICE_ACCOUNT_EMAIL` | Deploy service account email |
+| `PULUMI_CONFIG_PASSPHRASE` | State encryption passphrase |
+| `BITBUCKET_STEP_OIDC_TOKEN` | OIDC token (auto-provided by Bitbucket) |
+
+### Client Pipeline Example
+
+With the CLI, a client pipeline shrinks to ~10 lines:
+
+```yaml
+pipelines:
+  branches:
+    '**':
+      - step:
+          name: Deploy
+          oidc: true
+          script:
+            - git clone https://bitbucket.org/your-workspace/devops-gcp-pulumi.git infra
+            - cd infra/cli && npm ci
+            - npx devops-gcp deploy --app $APP_NAME --branch $BITBUCKET_BRANCH
+```
+
 ## Architecture
 
 ```

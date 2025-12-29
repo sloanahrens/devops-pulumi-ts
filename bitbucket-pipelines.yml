@@ -1,6 +1,6 @@
 # Example Bitbucket Pipeline for client applications using devops-gcp-pulumi
 #
-# Copy this file to your application repository and customize as needed.
+# Copy this file to your application repository and customize APP_NAME below.
 #
 # Required Repository Variables:
 #   GCP_PROJECT          - GCP project ID (infra project where Cloud Run deploys)
@@ -56,7 +56,6 @@
 # which has cross-project access to your app's backend resources.
 # =============================================================================
 
-# Default image for build/test steps
 image: node:22-alpine
 
 definitions:
@@ -86,114 +85,14 @@ pipelines:
               - node
               - docker
             script:
-              # Application configuration - customize for your app
+              # Customize APP_NAME for your application
               - export APP_NAME=your-app-name
-
-              # Install dependencies
-              - apk add --no-cache git curl jq bash
-
-              # Install Pulumi CLI
+              - apk add --no-cache git curl bash
               - curl -fsSL https://get.pulumi.com | sh
               - export PATH=$PATH:$HOME/.pulumi/bin
-
-              # Validate required repository variables
-              - |
-                MISSING=""
-                [ -z "$GCP_PROJECT" ] && MISSING="$MISSING GCP_PROJECT"
-                [ -z "$GCP_PROJECT_NUMBER" ] && MISSING="$MISSING GCP_PROJECT_NUMBER"
-                [ -z "$GCP_REGION" ] && MISSING="$MISSING GCP_REGION"
-                [ -z "$STATE_BUCKET" ] && MISSING="$MISSING STATE_BUCKET"
-                [ -z "$SERVICE_ACCOUNT_EMAIL" ] && MISSING="$MISSING SERVICE_ACCOUNT_EMAIL"
-                [ -z "$PULUMI_CONFIG_PASSPHRASE" ] && MISSING="$MISSING PULUMI_CONFIG_PASSPHRASE"
-                if [ -n "$MISSING" ]; then
-                  echo "=============================================="
-                  echo "ERROR: Missing required repository variables:"
-                  echo "=============================================="
-                  for var in $MISSING; do
-                    echo "  - $var"
-                  done
-                  echo ""
-                  echo "Set these in: Repository Settings > Pipelines > Repository variables"
-                  echo ""
-                  echo "Required variables (from devops-gcp-pulumi bootstrap/infrastructure outputs):"
-                  echo "  GCP_PROJECT          - GCP project ID"
-                  echo "  GCP_PROJECT_NUMBER   - GCP project number (for WIF)"
-                  echo "  GCP_REGION           - GCP region (e.g., us-central1)"
-                  echo "  STATE_BUCKET         - GCS bucket name for Pulumi state"
-                  echo "  SERVICE_ACCOUNT_EMAIL - Deploy service account email"
-                  echo "  PULUMI_CONFIG_PASSPHRASE - State encryption passphrase (secured)"
-                  exit 1
-                fi
-                echo "All required variables are set"
-
-              # Clone infra repo
               - git clone https://bitbucket.org/YOUR_WORKSPACE/devops-gcp-pulumi.git infra
-
-              # Normalize branch name for Cloud Run (max 63 chars, DNS-safe)
-              - export BRANCH_TAG=$(./infra/scripts/normalize-branch.sh "$BITBUCKET_BRANCH")
-              - echo "Deploying branch '${BITBUCKET_BRANCH}' as '${BRANCH_TAG}'"
-
-              # Get GCP access token via Workload Identity Federation
-              - |
-                export ACCESS_TOKEN=$(./infra/scripts/get-wif-token.sh)
-                if [ -z "$ACCESS_TOKEN" ]; then
-                  echo "Failed to get GCP access token"
-                  exit 1
-                fi
-
-              # Configure auth for Docker and Pulumi
-              - export CLOUDSDK_AUTH_ACCESS_TOKEN="${ACCESS_TOKEN}"
-              - export GOOGLE_OAUTH_ACCESS_TOKEN="${ACCESS_TOKEN}"
-
-              # Get registry URL from infrastructure stack
-              - |
-                cd infra/infrastructure
-                npm ci --silent
-                pulumi login "gs://${STATE_BUCKET}"
-                export REGISTRY_URL=$(pulumi stack output registryUrl -s organization/infrastructure/prod --show-secrets 2>/dev/null)
-                echo "Registry URL: ${REGISTRY_URL}"
-                echo "REGISTRY_URL=${REGISTRY_URL}" >> $BITBUCKET_PIPE_STORAGE_DIR/env_vars
-
-              # Build and push Docker image (with layer caching)
-              - |
-                source $BITBUCKET_PIPE_STORAGE_DIR/env_vars
-                cd $BITBUCKET_CLONE_DIR
-                IMAGE="${REGISTRY_URL}/${APP_NAME}:${BRANCH_TAG}"
-                echo "${ACCESS_TOKEN}" | docker login -u oauth2accesstoken --password-stdin "https://${GCP_REGION}-docker.pkg.dev"
-                # Pull existing image for layer caching (ignore errors if first build)
-                docker pull "${IMAGE}" 2>/dev/null || echo "No existing image to cache from (first build)"
-                docker build --platform linux/amd64 --cache-from "${IMAGE}" -t "${IMAGE}" .
-                docker push "${IMAGE}"
-
-              # Deploy via Pulumi
-              - |
-                source $BITBUCKET_PIPE_STORAGE_DIR/env_vars
-                cd $BITBUCKET_CLONE_DIR/infra/app
-                npm ci --silent
-                pulumi stack select "organization/app/${APP_NAME}-${BRANCH_TAG}" --create 2>/dev/null || true
-                pulumi config set "gcp:project" "${GCP_PROJECT}"
-                pulumi config set appName "${APP_NAME}"
-                pulumi config set imageTag "${BRANCH_TAG}"
-                pulumi config set infraStackRef "organization/infrastructure/prod"
-                pulumi config set region "${GCP_REGION}"
-                pulumi up --yes
-
-              # Get deployment URL and run health check
-              - |
-                cd infra/app
-                URL=$(pulumi stack output url --show-secrets 2>/dev/null)
-                echo "Deployed to ${URL}"
-                echo "Running health check..."
-                for i in $(seq 1 6); do
-                  if curl -sf "${URL}/health" > /dev/null 2>&1; then
-                    echo "Health check passed!"
-                    exit 0
-                  fi
-                  echo "Attempt $i/6 failed, retrying in 10s..."
-                  sleep 10
-                done
-                echo "Health check failed after 60 seconds"
-                exit 1
+              - cd infra/cli && npm ci
+              - npx devops-gcp deploy --app "$APP_NAME" --branch "$BITBUCKET_BRANCH" --context "$BITBUCKET_CLONE_DIR"
 
   custom:
     # Branch cleanup pipeline - triggered manually when a branch is deleted
@@ -205,69 +104,11 @@ pipelines:
           name: Cleanup Branch Resources
           oidc: true
           script:
-            # Application configuration - must match deploy step
+            # Must match APP_NAME from deploy step
             - export APP_NAME=your-app-name
-
-            # Install dependencies
-            - apk add --no-cache git curl jq bash
-
-            # Install Pulumi CLI
+            - apk add --no-cache git curl bash
             - curl -fsSL https://get.pulumi.com | sh
             - export PATH=$PATH:$HOME/.pulumi/bin
-
-            # Validate required variables
-            - |
-              MISSING=""
-              [ -z "$DELETED_BRANCH" ] && MISSING="$MISSING DELETED_BRANCH"
-              [ -z "$GCP_PROJECT" ] && MISSING="$MISSING GCP_PROJECT"
-              [ -z "$GCP_PROJECT_NUMBER" ] && MISSING="$MISSING GCP_PROJECT_NUMBER"
-              [ -z "$STATE_BUCKET" ] && MISSING="$MISSING STATE_BUCKET"
-              [ -z "$SERVICE_ACCOUNT_EMAIL" ] && MISSING="$MISSING SERVICE_ACCOUNT_EMAIL"
-              [ -z "$PULUMI_CONFIG_PASSPHRASE" ] && MISSING="$MISSING PULUMI_CONFIG_PASSPHRASE"
-              if [ -n "$MISSING" ]; then
-                echo "=============================================="
-                echo "ERROR: Missing required variables:"
-                echo "=============================================="
-                for var in $MISSING; do
-                  echo "  - $var"
-                done
-                echo ""
-                if echo "$MISSING" | grep -q "DELETED_BRANCH"; then
-                  echo "DELETED_BRANCH: Go to Pipelines -> Run pipeline -> Custom: branch-cleanup"
-                  echo "                Then enter the branch name to clean up"
-                  echo ""
-                fi
-                echo "Repository variables: Settings > Pipelines > Repository variables"
-                exit 1
-              fi
-
-            # Clone infrastructure repo
             - git clone https://bitbucket.org/YOUR_WORKSPACE/devops-gcp-pulumi.git infra
-
-            # Normalize the deleted branch name
-            - export BRANCH_TAG=$(./infra/scripts/normalize-branch.sh "$DELETED_BRANCH")
-            - export STACK_NAME="${APP_NAME}-${BRANCH_TAG}"
-            - echo "Cleaning up stack '${STACK_NAME}' for deleted branch '${DELETED_BRANCH}'"
-
-            # Get GCP access token via Workload Identity Federation
-            - |
-              export ACCESS_TOKEN=$(./infra/scripts/get-wif-token.sh)
-              export CLOUDSDK_AUTH_ACCESS_TOKEN="${ACCESS_TOKEN}"
-              export GOOGLE_OAUTH_ACCESS_TOKEN="${ACCESS_TOKEN}"
-
-            # Check if stack exists and destroy
-            - |
-              cd infra/app
-              npm ci --silent
-              pulumi login "gs://${STATE_BUCKET}"
-              if pulumi stack select "organization/app/${STACK_NAME}" 2>/dev/null; then
-                echo "Stack exists, destroying..."
-                pulumi config set "gcp:project" "${GCP_PROJECT}"
-                pulumi destroy --yes
-                pulumi stack rm --yes
-                echo "Stack '${STACK_NAME}' destroyed successfully"
-              else
-                echo "No stack found for '${STACK_NAME}', nothing to clean up"
-              fi
-
-            - echo "Cleanup complete for branch '${DELETED_BRANCH}'"
+            - cd infra/cli && npm ci
+            - npx devops-gcp cleanup --app "$APP_NAME" --branch "$DELETED_BRANCH"

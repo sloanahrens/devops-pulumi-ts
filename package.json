@@ -4,10 +4,9 @@
   "description": "Pulumi-based infrastructure for deploying containerized apps to GCP Cloud Run via Bitbucket Pipelines",
   "private": true,
   "scripts": {
-    "test": "npm run test:bootstrap && npm run test:infrastructure && npm run test:app",
-    "test:bootstrap": "cd bootstrap && npm test",
-    "test:infrastructure": "cd infrastructure && npm test",
-    "test:app": "cd app && npm test"
+    "test": "cd cli && npm test",
+    "test:cli": "cd cli && npm test",
+    "typecheck": "cd bootstrap && npx tsc --noEmit && cd ../infrastructure && npx tsc --noEmit && cd ../app && npx tsc --noEmit && cd ../cli && npx tsc --noEmit"
   },
   "devDependencies": {
     "typescript": "^5.3.0"
