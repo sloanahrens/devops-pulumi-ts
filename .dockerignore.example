@@ -1,0 +1,83 @@
+# Example .dockerignore for applications using devops-gcp-pulumi
+#
+# Copy this file to your application repository as ".dockerignore"
+# and customize as needed.
+#
+# IMPORTANT: The "infra" directory is cloned during CI/CD and MUST be
+# excluded from Docker builds to prevent TypeScript compilation errors.
+
+# Cloned devops repos (created during CI/CD pipeline)
+# These directories contain Pulumi TypeScript that would cause build errors
+infra
+devops
+devops-cloud-run
+devops-azure-container-apps
+devops-gcp-pulumi
+
+# Dependencies (will be installed fresh in Docker build)
+node_modules
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Build output (will be created fresh in Docker build)
+.next
+out
+dist
+build
+
+# IDE and editor files
+.vscode
+.idea
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Git (not needed in container)
+.git
+.gitignore
+
+# Docker files (prevent recursive issues)
+Dockerfile
+Dockerfile.*
+.dockerignore
+docker-compose*.yml
+
+# Environment files (use runtime env vars instead)
+.env
+.env.*
+!.env.example
+
+# Test files (not needed in production)
+__tests__
+*.test.ts
+*.test.tsx
+*.spec.ts
+*.spec.tsx
+coverage
+.nyc_output
+
+# Documentation (not needed in container)
+docs
+*.md
+!README.md
+
+# CI/CD configuration (not needed in container)
+.github
+.gitlab-ci.yml
+bitbucket-pipelines.yml
+.circleci
+
+# ESLint/Prettier cache
+.eslintcache
+.prettiercache
+
+# TypeScript build info (will be regenerated)
+*.tsbuildinfo
+
+# Misc
+*.log
+tmp
+temp
