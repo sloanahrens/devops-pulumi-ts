@@ -33,16 +33,17 @@ export function createCustomRoles(projectId: string) {
         ],
     });
 
-    // Artifact Registry - push images, manage tags, cleanup old versions
+    // Artifact Registry - push/pull images, manage tags, cleanup old versions
     const artifactRegistry = new gcp.projects.IAMCustomRole("pulumi-artifact-registry", {
         roleId: "pulumiArtifactRegistry",
         title: "Pulumi Artifact Registry",
-        description: "Minimal permissions for Docker image push and cleanup",
+        description: "Minimal permissions for Docker image push/pull and cleanup",
         permissions: [
             // Repository access (read-only)
             "artifactregistry.repositories.get",
-            // Image upload
+            // Image upload and download (download needed for layer caching)
             "artifactregistry.repositories.uploadArtifacts",
+            "artifactregistry.repositories.downloadArtifacts",
             // Tag management
             "artifactregistry.tags.create",
             "artifactregistry.tags.update",
