@@ -1,4 +1,4 @@
-.PHONY: help install typecheck test test-cov build clean dev
+.PHONY: help install lint typecheck test test-cov build clean dev
 
 # Default target
 help: ## Show available targets
@@ -17,6 +17,9 @@ install: ## Install all dependencies (cli + 6 stacks)
 	cd azure/app && npm install
 	@echo "All dependencies installed."
 
+lint: ## Run ESLint on CLI source
+	cd cli && npm run lint
+
 typecheck: ## Type-check all TypeScript
 	@echo "Type-checking CLI..."
 	cd cli && npx tsc --noEmit
@@ -33,8 +36,8 @@ typecheck: ## Type-check all TypeScript
 test: ## Run CLI unit tests
 	cd cli && npm test
 
-test-cov: ## Run tests with coverage (requires @vitest/coverage-v8)
-	cd cli && npx vitest run --coverage
+test-cov: ## Run tests with coverage
+	cd cli && npm run test:cov
 
 build: ## Build CLI for distribution
 	cd cli && npm run build
