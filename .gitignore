@@ -5,6 +5,7 @@ node_modules/
 dist/
 bin/
 *.js
+!eslint.config.js
 *.d.ts
 *.js.map
 
