@@ -298,6 +298,23 @@ Copy the appropriate template to your app repo:
 | Azure | GitHub Actions | `workflows/github/azure-deploy.yml` |
 | Azure | Bitbucket | `workflows/bitbucket/azure-pipelines.yml` |
 
+## Code Quality
+
+**Metrics (2026-01-03):**
+- Files: 34 | Lines: ~4,600 | Functions: 37
+- CLI Tests: 79 passing | Coverage: 83% overall
+- All stacks type-check cleanly
+
+**Run checks:**
+```bash
+npm test                    # Run all tests
+npm run lint                # ESLint
+npm run build               # Build CLI
+cd cli && npm run test:cov  # Coverage report
+```
+
+See `docs/tech-review.md` for detailed analysis.
+
 ## Client Handoff
 
 For consulting engagements, clients can:

@@ -6,6 +6,8 @@
   "scripts": {
     "test": "cd cli && npm test",
     "test:cli": "cd cli && npm test",
+    "lint": "cd cli && npm run lint",
+    "build": "cd cli && npm run build",
     "typecheck": "cd bootstrap && npx tsc --noEmit && cd ../infrastructure && npx tsc --noEmit && cd ../app && npx tsc --noEmit && cd ../cli && npx tsc --noEmit"
   },
   "devDependencies": {
