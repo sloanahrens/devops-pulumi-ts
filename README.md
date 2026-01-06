@@ -190,6 +190,7 @@ Long branch names are truncated with a hash suffix to avoid collisions.
 | `--max-instances` | 100 | 100 | Maximum instances |
 | `--private` | false | false | Require authentication |
 | `--custom-domain` | - | - | Custom domain mapping |
+| `--health-path` | /health | /health | Health check endpoint path |
 
 ## Testing
 

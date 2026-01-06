@@ -140,6 +140,7 @@ The `--cloud` flag can be omitted if auto-detectable:
 | `--memory` | `--memory 1Gi` | Memory limit |
 | `--custom-domain` | `--custom-domain example.com` | Custom domain |
 | `--build-args-from-env` | `--build-args-from-env "API_KEY"` | Docker build args |
+| `--health-path` | `--health-path /api/health` | Health check endpoint (default: /health) |
 
 ### Branch Name Normalization
 
@@ -302,7 +303,7 @@ Copy the appropriate template to your app repo:
 
 **Metrics (2026-01-05):**
 - Files: 37 | Lines: ~5,400 | Functions: 40
-- Tests: 225 passing (79 CLI + 93 GCP stacks + 53 Azure stacks)
+- Tests: 227 passing (81 CLI + 93 GCP stacks + 53 Azure stacks)
 - All stacks type-check cleanly
 
 **Run checks:**
@@ -318,7 +319,6 @@ cd cli && npm run test:cov  # Coverage report
 | Issue | Impact | Workaround |
 |-------|--------|------------|
 | Hard-coded `"organization"` in stack refs | Won't work if Pulumi org differs | Set `PULUMI_ORG` env var (not yet implemented) |
-| Health check assumes `/health` path | Apps without `/health` fail health check | Add `/health` endpoint or skip check |
 | No automatic image cleanup | Registry accumulates old images | Manual cleanup or lifecycle policies |
 | Custom domain `forceOverride: true` | Could steal domain from another service | Verify domain ownership first |
 

@@ -57,6 +57,7 @@ program
   .option("--private", "Require authentication (disable public access)")
   .option("--build-args-from-env <vars>", "Comma-separated env var names to pass as Docker build args")
   .option("--custom-domain <domain>", "Custom domain to map")
+  .option("--health-path <path>", "Health check endpoint path", "/health")
   .action(async (options) => {
     try {
       const cloud = resolveCloud(options.cloud);

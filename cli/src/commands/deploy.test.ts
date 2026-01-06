@@ -233,6 +233,14 @@ describe("deploy command", () => {
       });
     });
 
+    it("uses custom health path when specified", async () => {
+      await deploy({ ...gcpOptions, healthPath: "/api/health" });
+
+      expect(mockHealthCheck).toHaveBeenCalledWith({
+        url: "https://myapp-feature-test-branch-abc123.run.app/api/health",
+      });
+    });
+
     it("writes service URL to file", async () => {
       await deploy(gcpOptions);
 
@@ -381,6 +389,14 @@ describe("deploy command", () => {
           }),
         })
       );
+    });
+
+    it("uses custom health path when specified", async () => {
+      await deploy({ ...azureOptions, healthPath: "/api/health" });
+
+      expect(mockHealthCheck).toHaveBeenCalledWith({
+        url: "https://myapp-main.azurecontainerapps.io/api/health",
+      });
     });
   });
 

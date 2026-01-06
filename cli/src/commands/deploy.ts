@@ -32,6 +32,7 @@ export interface DeployOptions {
   private?: boolean;
   buildArgsFromEnv?: string;
   customDomain?: string;
+  healthPath?: string;
 }
 
 async function deployGcp(options: DeployOptions, env: GcpDeployEnv): Promise<void> {
@@ -147,8 +148,9 @@ async function deployGcp(options: DeployOptions, env: GcpDeployEnv): Promise<voi
   console.log(`Deployed to ${result.url}\n`);
 
   // Health check
-  console.log("Running health check...");
-  await healthCheck({ url: `${result.url}/health` });
+  const healthPath = options.healthPath || "/health";
+  console.log(`Running health check (${healthPath})...`);
+  await healthCheck({ url: `${result.url}${healthPath}` });
 
   fs.writeFileSync("/tmp/service-url.txt", result.url);
   console.log("\nDeployment successful!\n");
@@ -245,8 +247,9 @@ async function deployAzure(options: DeployOptions, env: AzureDeployEnv): Promise
   console.log(`Deployed to ${result.url}\n`);
 
   // Health check
-  console.log("Running health check...");
-  await healthCheck({ url: `${result.url}/health` });
+  const healthPath = options.healthPath || "/health";
+  console.log(`Running health check (${healthPath})...`);
+  await healthCheck({ url: `${result.url}${healthPath}` });
 
   fs.writeFileSync("/tmp/service-url.txt", result.url);
   console.log("\nDeployment successful!\n");
