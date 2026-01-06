@@ -38,26 +38,10 @@ export function createCustomRoles(
         }],
     });
 
-    // Container Registry - push/pull images, manage manifests for cleanup
-    const registryPusher = new azure.authorization.RoleDefinition("registry-pusher", {
-        roleName: "Registry Image Pusher",
-        description: "Minimal permissions for Docker image push/pull and cleanup",
-        scope: rgScope,
-        assignableScopes: [rgScope],
-        permissions: [{
-            actions: [
-                // Pull images (needed for layer caching)
-                "Microsoft.ContainerRegistry/registries/pull/read",
-                // Push images
-                "Microsoft.ContainerRegistry/registries/push/write",
-                // Read registry metadata
-                "Microsoft.ContainerRegistry/registries/read",
-                // Delete manifests (for cleanup of old tags)
-                "Microsoft.ContainerRegistry/registries/manifests/delete",
-            ],
-            notActions: [],
-        }],
-    });
+    // For ACR, use built-in AcrPush role (includes pull + push)
+    // Custom roles don't work well with ACR data actions
+    // Built-in role ID for AcrPush: 8311e382-0749-4cb8-b61a-304f252e45ec
+    const acrPushRoleId = pulumi.interpolate`/subscriptions/${subscriptionId}/providers/Microsoft.Authorization/roleDefinitions/8311e382-0749-4cb8-b61a-304f252e45ec`;
 
-    return { containerAppsDeploy, registryPusher };
+    return { containerAppsDeploy, acrPushRoleId };
 }

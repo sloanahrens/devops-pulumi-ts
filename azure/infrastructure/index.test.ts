@@ -6,11 +6,11 @@ const resources: Array<{ type: string; name: string; inputs: Record<string, unkn
 
 // Set required config values BEFORE setting mocks
 pulumi.runtime.setAllConfig({
+    "infrastructure:resourceGroupName": "test-resource-group",
     "infrastructure:githubOrg": "test-org",
     "infrastructure:githubRepo": "test-repo",
     "infrastructure:bitbucketWorkspaceUuid": "{test-uuid}",
     "infrastructure:bitbucketWorkspaceSlug": "test-workspace",
-    "infrastructure:location": "eastus",
 });
 
 // Mock Pulumi runtime before importing the module
@@ -40,6 +40,13 @@ pulumi.runtime.setMocks(
                     tenantId: "mock-tenant-id",
                 };
             }
+            if (args.token === "azure-native:resources:getResourceGroup") {
+                return {
+                    name: "test-resource-group",
+                    location: "westus2",
+                    id: "/subscriptions/mock-sub/resourceGroups/test-resource-group",
+                };
+            }
             return {};
         },
     },
@@ -60,7 +67,6 @@ describe("Infrastructure", () => {
         infra = await import("./index");
         // Wait for all resources to be created by resolving all outputs
         await Promise.all([
-            promiseOf(infra.resourceGroupName),
             promiseOf(infra.environmentId),
             promiseOf(infra.environmentName),
             promiseOf(infra.acrLoginServer),
@@ -72,13 +78,14 @@ describe("Infrastructure", () => {
     });
 
     describe("Resource Group", () => {
-        it("creates a resource group with correct tags", () => {
+        it("uses existing resource group from config", () => {
+            // resourceGroupName is a plain string from config, not a Pulumi Output
+            expect(infra.resourceGroupName).toBe("test-resource-group");
+        });
+
+        it("does not create a new resource group", () => {
             const rg = resources.find(r => r.type === "azure-native:resources:ResourceGroup");
-            expect(rg).toBeDefined();
-            expect(rg?.inputs.tags).toMatchObject({
-                managedBy: "pulumi",
-                purpose: "shared-infrastructure",
-            });
+            expect(rg).toBeUndefined();
         });
     });
 
@@ -122,11 +129,12 @@ describe("Infrastructure", () => {
             expect(containerAppsRole?.inputs.roleName).toBe("Container Apps Deployer");
         });
 
-        it("creates Registry Image Pusher custom role", () => {
+        it("uses built-in AcrPush role for ACR permissions", () => {
+            // No custom role for ACR - we use built-in AcrPush role
+            // Custom roles don't work well with ACR data actions
             const roles = resources.filter(r => r.type === "azure-native:authorization:RoleDefinition");
             const registryRole = roles.find(r => r.name === "registry-pusher");
-            expect(registryRole).toBeDefined();
-            expect(registryRole?.inputs.roleName).toBe("Registry Image Pusher");
+            expect(registryRole).toBeUndefined();
         });
     });
 
@@ -175,9 +183,10 @@ describe("Infrastructure", () => {
     });
 
     describe("Exports", () => {
-        it("exports resourceGroupName", async () => {
-            const value = await promiseOf(infra.resourceGroupName);
-            expect(value).toBeDefined();
+        it("exports resourceGroupName", () => {
+            // resourceGroupName is a plain string from config
+            expect(infra.resourceGroupName).toBeDefined();
+            expect(typeof infra.resourceGroupName).toBe("string");
         });
 
         it("exports acrLoginServer", async () => {
@@ -190,11 +199,11 @@ describe("Infrastructure", () => {
             expect(value).toBeDefined();
         });
 
-        it("exports custom role IDs", async () => {
+        it("exports role IDs", async () => {
             const containerAppsRoleId = await promiseOf(infra.containerAppsDeployRoleId);
-            const registryRoleId = await promiseOf(infra.registryPusherRoleId);
+            const acrPushRoleId = await promiseOf(infra.acrPushRoleId);
             expect(containerAppsRoleId).toBeDefined();
-            expect(registryRoleId).toBeDefined();
+            expect(acrPushRoleId).toBeDefined();
         });
     });
 });

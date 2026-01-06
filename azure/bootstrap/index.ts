@@ -8,7 +8,15 @@ const commonTags = {
 };
 
 const config = new pulumi.Config();
-const location = config.get("location") || "eastus";
+
+// Resource group name is required - must exist already
+// Can be set via Pulumi config or AZURE_RESOURCE_GROUP env var
+const resourceGroupName = config.require("resourceGroupName");
+
+// Get the existing resource group
+const existingRg = azure.resources.getResourceGroupOutput({
+    resourceGroupName: resourceGroupName,
+});
 
 // Get subscription ID for deterministic storage account naming
 const clientConfig = azure.authorization.getClientConfigOutput();
@@ -19,16 +27,10 @@ const derivedStorageAccountName = clientConfig.subscriptionId.apply(
     (subId) => `pulumistate${subId.replace(/-/g, "").slice(-8)}`
 );
 
-// Bootstrap resource group - separate from infrastructure
-const bootstrapRg = new azure.resources.ResourceGroup("devops-bootstrap-rg", {
-    location,
-    tags: commonTags,
-});
-
 // Storage account for Pulumi state
 const storageAccount = new azure.storage.StorageAccount("state-storage", {
-    resourceGroupName: bootstrapRg.name,
-    location: bootstrapRg.location,
+    resourceGroupName: existingRg.name,
+    location: existingRg.location,
     accountName: derivedStorageAccountName,
     sku: { name: azure.storage.SkuName.Standard_LRS },
     kind: azure.storage.Kind.StorageV2,
@@ -40,14 +42,14 @@ const storageAccount = new azure.storage.StorageAccount("state-storage", {
 
 // Blob container for state files
 const stateContainer = new azure.storage.BlobContainer("state", {
-    resourceGroupName: bootstrapRg.name,
+    resourceGroupName: existingRg.name,
     accountName: storageAccount.name,
     containerName: "state",
     publicAccess: azure.storage.PublicAccess.None,
 });
 
 // Exports
-export const resourceGroupName = bootstrapRg.name;
+export { resourceGroupName };
 export const storageAccountName = storageAccount.name;
 export const containerName = stateContainer.name;
 export const backendUrl = pulumi.interpolate`azblob://${stateContainer.name}?storage_account=${storageAccount.name}`;

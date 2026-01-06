@@ -1,6 +1,6 @@
 import * as pulumi from "@pulumi/pulumi";
 import * as azure from "@pulumi/azure-native";
-import { createCustomRoles } from "./roles.js";
+import { createCustomRoles } from "./roles";
 
 // Common tags applied to all resources
 const commonTags = {
@@ -8,7 +8,15 @@ const commonTags = {
 };
 
 const config = new pulumi.Config();
-const location = config.get("location") || "eastus";
+
+// Resource group name is required - must exist already
+// Can be set via Pulumi config or AZURE_RESOURCE_GROUP env var
+const resourceGroupName = config.require("resourceGroupName");
+
+// Get the existing resource group
+const existingRg = azure.resources.getResourceGroupOutput({
+    resourceGroupName: resourceGroupName,
+});
 
 // CI/CD provider configuration (at least one required)
 const githubOrg = config.get("githubOrg");
@@ -21,19 +29,10 @@ if (!githubOrg && !bitbucketWorkspaceUuid) {
     throw new Error("At least one CI provider must be configured: set githubOrg or bitbucketWorkspaceUuid");
 }
 
-// Shared resource group
-const sharedRg = new azure.resources.ResourceGroup("devops-shared-rg", {
-    location,
-    tags: {
-        ...commonTags,
-        purpose: "shared-infrastructure",
-    },
-});
-
 // Container Registry
 const acr = new azure.containerregistry.Registry("acr", {
-    resourceGroupName: sharedRg.name,
-    location: sharedRg.location,
+    resourceGroupName: existingRg.name,
+    location: existingRg.location,
     sku: { name: "Basic" },
     adminUserEnabled: false,
     tags: commonTags,
@@ -41,15 +40,15 @@ const acr = new azure.containerregistry.Registry("acr", {
 
 // Container Apps Environment
 const environment = new azure.app.ManagedEnvironment("env", {
-    resourceGroupName: sharedRg.name,
-    location: sharedRg.location,
+    resourceGroupName: existingRg.name,
+    location: existingRg.location,
     tags: commonTags,
 });
 
 // Managed Identity for CI/CD deployments
 const deployIdentity = new azure.managedidentity.UserAssignedIdentity("deploy-identity", {
-    resourceGroupName: sharedRg.name,
-    location: sharedRg.location,
+    resourceGroupName: existingRg.name,
+    location: existingRg.location,
     tags: {
         ...commonTags,
         purpose: "cicd-deployment",
@@ -60,21 +59,21 @@ const deployIdentity = new azure.managedidentity.UserAssignedIdentity("deploy-id
 const clientConfig = azure.authorization.getClientConfigOutput();
 
 // Create custom RBAC roles with minimal permissions
-const customRoles = createCustomRoles(clientConfig.subscriptionId, sharedRg.name);
+const customRoles = createCustomRoles(clientConfig.subscriptionId, existingRg.name);
 
 // Role assignment: Container Apps Deployer (custom role)
 const containerAppsRole = new azure.authorization.RoleAssignment("container-apps-deploy", {
     principalId: deployIdentity.principalId,
     principalType: "ServicePrincipal",
     roleDefinitionId: customRoles.containerAppsDeploy.id,
-    scope: sharedRg.id,
+    scope: existingRg.id,
 });
 
-// Role assignment: Registry Image Pusher (custom role)
+// Role assignment: ACR Push (built-in role - custom roles don't work with ACR data actions)
 const registryRole = new azure.authorization.RoleAssignment("registry-pusher", {
     principalId: deployIdentity.principalId,
     principalType: "ServicePrincipal",
-    roleDefinitionId: customRoles.registryPusher.id,
+    roleDefinitionId: customRoles.acrPushRoleId,
     scope: acr.id,
 });
 
@@ -82,7 +81,7 @@ const registryRole = new azure.authorization.RoleAssignment("registry-pusher", {
 let githubWifProvider: pulumi.Output<string> | undefined;
 if (githubOrg && githubRepo) {
     const githubFederation = new azure.managedidentity.FederatedIdentityCredential("github-federation", {
-        resourceGroupName: sharedRg.name,
+        resourceGroupName: existingRg.name,
         resourceName: deployIdentity.name,
         issuer: "https://token.actions.githubusercontent.com",
         subject: `repo:${githubOrg}/${githubRepo}:ref:refs/heads/*`,
@@ -96,7 +95,7 @@ if (githubOrg && githubRepo) {
 let bitbucketWifProvider: pulumi.Output<string> | undefined;
 if (bitbucketWorkspaceUuid && bitbucketWorkspaceSlug) {
     const bitbucketFederation = new azure.managedidentity.FederatedIdentityCredential("bitbucket-federation", {
-        resourceGroupName: sharedRg.name,
+        resourceGroupName: existingRg.name,
         resourceName: deployIdentity.name,
         issuer: `https://api.bitbucket.org/2.0/workspaces/${bitbucketWorkspaceSlug}/pipelines-config/identity/oidc`,
         subject: bitbucketWorkspaceUuid,
@@ -107,7 +106,7 @@ if (bitbucketWorkspaceUuid && bitbucketWorkspaceSlug) {
 }
 
 // Exports for app stacks to reference
-export const resourceGroupName = sharedRg.name;
+export { resourceGroupName };
 export const environmentId = environment.id;
 export const environmentName = environment.name;
 export const acrLoginServer = acr.loginServer;
@@ -116,9 +115,9 @@ export const deployIdentityId = deployIdentity.id;
 export const deployIdentityClientId = deployIdentity.clientId;
 export const deployIdentityPrincipalId = deployIdentity.principalId;
 
-// Export custom role IDs for reference
+// Export role IDs for reference
 export const containerAppsDeployRoleId = customRoles.containerAppsDeploy.id;
-export const registryPusherRoleId = customRoles.registryPusher.id;
+export const acrPushRoleId = customRoles.acrPushRoleId;
 
 // Export WIF provider info (for documentation)
 export { githubWifProvider, bitbucketWifProvider };

@@ -45,25 +45,33 @@ export class DeployEnvError extends Error {
   }
 }
 
-function validateOidcToken(env: Record<string, string | undefined>): void {
+function validateOidcToken(env: Record<string, string | undefined>, cloud: Cloud): void {
   const hasBitbucket = !!env.BITBUCKET_STEP_OIDC_TOKEN;
   const hasGitHub = !!env.ACTIONS_ID_TOKEN_REQUEST_TOKEN;
 
   if (!hasBitbucket && !hasGitHub) {
     throw new DeployEnvError(
       ["BITBUCKET_STEP_OIDC_TOKEN or ACTIONS_ID_TOKEN_REQUEST_TOKEN"],
-      "gcp" // Will be overwritten by caller
+      cloud
     );
   }
+}
+
+function extractMissingVars(issues: z.ZodIssue[]): string[] {
+  // Catch both undefined values (invalid_type) and empty strings (too_small)
+  return issues
+    .filter(issue =>
+      (issue.code === "invalid_type" && issue.received === "undefined") ||
+      (issue.code === "too_small" && issue.type === "string")
+    )
+    .map(issue => issue.path[0] as string);
 }
 
 export function validateGcpEnv(env: Record<string, string | undefined>): GcpDeployEnv {
   const result = gcpEnvSchema.safeParse(env);
 
   if (!result.success) {
-    const missingVars = result.error.issues
-      .filter(issue => issue.code === "invalid_type" && issue.received === "undefined")
-      .map(issue => issue.path[0] as string);
+    const missingVars = extractMissingVars(result.error.issues);
 
     if (missingVars.length > 0) {
       throw new DeployEnvError(missingVars, "gcp");
@@ -72,7 +80,7 @@ export function validateGcpEnv(env: Record<string, string | undefined>): GcpDepl
     throw new Error(`Environment validation failed: ${result.error.message}`);
   }
 
-  validateOidcToken(env);
+  validateOidcToken(env, "gcp");
   return result.data;
 }
 
@@ -80,9 +88,7 @@ export function validateAzureEnv(env: Record<string, string | undefined>): Azure
   const result = azureEnvSchema.safeParse(env);
 
   if (!result.success) {
-    const missingVars = result.error.issues
-      .filter(issue => issue.code === "invalid_type" && issue.received === "undefined")
-      .map(issue => issue.path[0] as string);
+    const missingVars = extractMissingVars(result.error.issues);
 
     if (missingVars.length > 0) {
       throw new DeployEnvError(missingVars, "azure");
@@ -91,7 +97,7 @@ export function validateAzureEnv(env: Record<string, string | undefined>): Azure
     throw new Error(`Environment validation failed: ${result.error.message}`);
   }
 
-  validateOidcToken(env);
+  validateOidcToken(env, "azure");
   return result.data;
 }
 
@@ -100,9 +106,8 @@ export function validateDeployEnv(env: Record<string, string | undefined>, cloud
 }
 
 export function formatMissingVarsError(error: DeployEnvError): string {
-  const ciHint = error.cloud === "gcp"
-    ? "Set these in: Repository Settings > Pipelines > Repository variables"
-    : "Set these in: Repository Settings > Secrets and variables > Actions";
+  // Both GCP and Azure support Bitbucket Pipelines, so use the same hint
+  const ciHint = "Set these in: Repository Settings > Pipelines > Repository variables";
 
   const lines = [
     "==============================================",

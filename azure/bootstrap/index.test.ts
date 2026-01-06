@@ -4,6 +4,11 @@ import * as pulumi from "@pulumi/pulumi";
 // Store created resources for assertions
 const resources: Array<{ type: string; name: string; inputs: Record<string, unknown> }> = [];
 
+// Set required config values BEFORE setting mocks
+pulumi.runtime.setAllConfig({
+    "project:resourceGroupName": "test-resource-group",
+});
+
 // Mock Pulumi runtime
 pulumi.runtime.setMocks(
     {
@@ -16,9 +21,6 @@ pulumi.runtime.setMocks(
 
             const defaults: Record<string, any> = {};
 
-            if (args.type === "azure-native:resources:ResourceGroup") {
-                defaults.name = args.name;
-            }
             if (args.type === "azure-native:storage:StorageAccount") {
                 defaults.name = args.inputs.accountName || args.name;
             }
@@ -37,6 +39,13 @@ pulumi.runtime.setMocks(
                     subscriptionId: "1701a012-37d6-4f88-b086-f98bbdf258f0",
                     tenantId: "mock-tenant-id",
                     clientId: "mock-client-id",
+                };
+            }
+            if (args.token === "azure-native:resources:getResourceGroup") {
+                return {
+                    name: "test-resource-group",
+                    location: "westus2",
+                    id: "/subscriptions/mock-sub/resourceGroups/test-resource-group",
                 };
             }
             return {};
@@ -59,7 +68,6 @@ describe("Bootstrap Stack", () => {
         outputs = await import("./index");
         // Wait for all resources to be created
         await Promise.all([
-            promiseOf(outputs.resourceGroupName),
             promiseOf(outputs.storageAccountName),
             promiseOf(outputs.containerName),
             promiseOf(outputs.backendUrl),
@@ -67,18 +75,14 @@ describe("Bootstrap Stack", () => {
     });
 
     describe("Resource Group", () => {
-        it("should create bootstrap resource group", async () => {
-            const rg = resources.find(r => r.type === "azure-native:resources:ResourceGroup");
-            expect(rg).toBeDefined();
-            expect(rg?.name).toBe("devops-bootstrap-rg");
+        it("should use existing resource group from config", () => {
+            // resourceGroupName is a plain string from config, not a Pulumi Output
+            expect(outputs.resourceGroupName).toBe("test-resource-group");
         });
 
-        it("should apply correct tags", () => {
+        it("should not create a new resource group", () => {
             const rg = resources.find(r => r.type === "azure-native:resources:ResourceGroup");
-            expect(rg?.inputs.tags).toMatchObject({
-                managedBy: "pulumi",
-                purpose: "state-storage",
-            });
+            expect(rg).toBeUndefined();
         });
     });
 
