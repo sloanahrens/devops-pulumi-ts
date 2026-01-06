@@ -191,6 +191,63 @@ Long branch names are truncated with a hash suffix to avoid collisions.
 | `--private` | false | false | Require authentication |
 | `--custom-domain` | - | - | Custom domain mapping |
 
+## Testing
+
+Run tests for all stacks:
+
+```bash
+# CLI tests (79 tests)
+cd cli && npm test
+
+# GCP stack tests (93 tests)
+cd gcp/bootstrap && npm test      # 22 tests
+cd gcp/infrastructure && npm test # 35 tests
+cd gcp/app && npm test            # 36 tests
+
+# Azure stack tests (53 tests)
+cd azure/bootstrap && npm test      # 12 tests
+cd azure/infrastructure && npm test # 17 tests
+cd azure/app && npm test            # 24 tests
+```
+
+## Common Issues
+
+### "Workload Identity Federation failed"
+
+**GCP:** Check that:
+- The WIF provider's `attributeCondition` matches your workspace UUID or GitHub org
+- The audience format is correct (`ari:cloud:bitbucket::workspace/UUID` for Bitbucket)
+- IAM Credentials and STS APIs are enabled
+
+**Azure:** Check that:
+- The federated credential issuer matches exactly
+- The subject claim format is correct for your CI provider
+
+### "Permission denied" during deploy
+
+The deploy service account needs:
+- **GCP:** Custom `pulumiCloudRunDeploy` and `pulumiArtifactRegistry` roles
+- **Azure:** Custom Container Apps Deployer and AcrPush roles
+
+Run `pulumi up` in the infrastructure stack to ensure role bindings exist.
+
+### "Service name too long"
+
+Branch names are auto-truncated (63 chars GCP, 32 chars Azure) with a hash suffix. If you see unexpected names, this is normal behavior.
+
+### "State backend not accessible"
+
+Ensure the deploy identity has access to the state bucket/container:
+- **GCP:** `roles/storage.objectAdmin` on the state bucket
+- **Azure:** Storage Blob Data Contributor on the container
+
+### Docker build fails in pipeline
+
+Check that:
+- Dockerfile exists in repo root (or specify path)
+- Build args are passed via `--build-args-from-env`
+- Registry login succeeded (check WIF configuration)
+
 ## Client Handoff
 
 For consulting engagements, clients can:
