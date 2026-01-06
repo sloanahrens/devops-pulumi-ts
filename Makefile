@@ -32,4 +32,4 @@ clean: ## Remove build artifacts
 	@echo "Clean complete."
 
 dev: ## Run CLI in development mode
-	pnpm --filter cli run dev -- --help
+	cd cli && npx tsx src/index.ts --help
