@@ -76,10 +76,11 @@ definitions:
         caches:
           - node
         script:
-          - npm ci
-          - npm run build
-          - npm run lint
-          - npx tsc --noEmit
+          - corepack enable && corepack prepare pnpm@latest --activate
+          - pnpm install --frozen-lockfile
+          - pnpm run build
+          - pnpm run lint
+          - pnpm typecheck
 
     - step: &deploy
         name: Deploy to Cloud Run
@@ -91,10 +92,11 @@ definitions:
           - docker
         script:
           - apk add --no-cache git curl bash
+          - corepack enable && corepack prepare pnpm@latest --activate
           - curl -fsSL https://get.pulumi.com | sh
           - export PATH=$PATH:$HOME/.pulumi/bin
           - git clone https://bitbucket.org/YOUR_WORKSPACE/devops-pulumi-ts.git infra
-          - cd infra/cli && npm ci && npm run build
+          - cd infra && pnpm install --frozen-lockfile
           # Customize: replace YOUR_APP_NAME, add --port/--memory/--build-args-from-env as needed
           - npx devops-deploy deploy --cloud gcp --app YOUR_APP_NAME --branch "$BITBUCKET_BRANCH" --context "$BITBUCKET_CLONE_DIR"
           - echo "Service URL - $(cat /tmp/service-url.txt)"
@@ -110,10 +112,11 @@ definitions:
     #       - docker
     #     script:
     #       - apk add --no-cache git curl bash
+    #       - corepack enable && corepack prepare pnpm@latest --activate
     #       - curl -fsSL https://get.pulumi.com | sh
     #       - export PATH=$PATH:$HOME/.pulumi/bin
     #       - git clone https://bitbucket.org/YOUR_WORKSPACE/devops-pulumi-ts.git infra
-    #       - cd infra/cli && npm ci && npm run build
+    #       - cd infra && pnpm install --frozen-lockfile
     #       - npx devops-deploy deploy --cloud gcp --app YOUR_APP_NAME --branch "$BITBUCKET_BRANCH" --context "$BITBUCKET_CLONE_DIR" --custom-domain your-domain.com
     #       - echo "Service URL - $(cat /tmp/service-url.txt)"
 
@@ -140,9 +143,10 @@ pipelines:
           oidc: true
           script:
             - apk add --no-cache git curl bash
+            - corepack enable && corepack prepare pnpm@latest --activate
             - curl -fsSL https://get.pulumi.com | sh
             - export PATH=$PATH:$HOME/.pulumi/bin
             - git clone https://bitbucket.org/YOUR_WORKSPACE/devops-pulumi-ts.git infra
-            - cd infra/cli && npm ci && npm run build
+            - cd infra && pnpm install --frozen-lockfile
             # Must match app name from deploy steps
             - npx devops-deploy cleanup --cloud gcp --app YOUR_APP_NAME --branch "$DELETED_BRANCH"

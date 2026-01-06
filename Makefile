@@ -4,49 +4,32 @@
 help: ## Show available targets
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-15s\033[0m %s\n", $$1, $$2}'
 
-install: ## Install all dependencies (cli + 6 stacks)
-	@echo "Installing CLI dependencies..."
-	cd cli && npm install
-	@echo "Installing GCP stack dependencies..."
-	cd gcp/bootstrap && npm install
-	cd gcp/infrastructure && npm install
-	cd gcp/app && npm install
-	@echo "Installing Azure stack dependencies..."
-	cd azure/bootstrap && npm install
-	cd azure/infrastructure && npm install
-	cd azure/app && npm install
-	@echo "All dependencies installed."
+install: ## Install all dependencies (pnpm workspace)
+	pnpm install
 
 lint: ## Run ESLint on CLI source
-	cd cli && npm run lint
+	pnpm lint
 
 typecheck: ## Type-check all TypeScript
-	@echo "Type-checking CLI..."
-	cd cli && npx tsc --noEmit
-	@echo "Type-checking GCP stacks..."
-	cd gcp/bootstrap && npx tsc --noEmit
-	cd gcp/infrastructure && npx tsc --noEmit
-	cd gcp/app && npx tsc --noEmit
-	@echo "Type-checking Azure stacks..."
-	cd azure/bootstrap && npx tsc --noEmit
-	cd azure/infrastructure && npx tsc --noEmit
-	cd azure/app && npx tsc --noEmit
-	@echo "All type checks passed."
+	pnpm typecheck
 
-test: ## Run CLI unit tests
-	cd cli && npm test
+test: ## Run all unit tests
+	pnpm test
 
-test-cov: ## Run tests with coverage
-	cd cli && npm run test:cov
+test-cli: ## Run CLI unit tests only
+	pnpm test:cli
+
+test-cov: ## Run CLI tests with coverage
+	pnpm --filter cli run test:cov
 
 build: ## Build CLI for distribution
-	cd cli && npm run build
+	pnpm build
 
 clean: ## Remove build artifacts
 	rm -rf cli/dist
 	rm -rf cli/coverage
-	find . -name "node_modules" -type d -prune -exec rm -rf {} + 2>/dev/null || true
+	rm -rf node_modules
 	@echo "Clean complete."
 
 dev: ## Run CLI in development mode
-	cd cli && npm run dev -- --help
+	pnpm --filter cli run dev -- --help
