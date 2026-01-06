@@ -6,7 +6,8 @@ const appName = config.require("appName");
 const imageTag = config.require("imageTag");
 const cpuLimit = config.getNumber("cpuLimit") || 1;
 const memoryLimit = config.get("memoryLimit") || "2Gi";
-const targetPort = config.getNumber("targetPort") || 8080;
+// Accept both containerPort (from CLI) and targetPort (legacy) for compatibility
+const targetPort = config.getNumber("containerPort") || config.getNumber("targetPort") || 8080;
 const healthPath = config.get("healthPath") || "/health";
 
 // Stack name is the normalized branch name
@@ -108,3 +109,4 @@ const app = new azure.app.ContainerApp(serviceName, {
 export const url = pulumi.interpolate`https://${app.configuration.apply(c => c?.ingress?.fqdn)}`;
 export { resourceGroupName };
 export const containerAppName = app.name;
+export const serviceName_ = app.name;  // CLI compatibility (matches GCP app exports)
