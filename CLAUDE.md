@@ -300,9 +300,9 @@ Copy the appropriate template to your app repo:
 
 ## Code Quality
 
-**Metrics (2026-01-03):**
-- Files: 34 | Lines: ~4,600 | Functions: 37
-- CLI Tests: 79 passing | Coverage: 83% overall
+**Metrics (2026-01-05):**
+- Files: 37 | Lines: ~5,400 | Functions: 40
+- Tests: 225 passing (79 CLI + 93 GCP stacks + 53 Azure stacks)
 - All stacks type-check cleanly
 
 **Run checks:**
