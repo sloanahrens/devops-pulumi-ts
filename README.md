@@ -14,12 +14,17 @@ Unified Pulumi-based infrastructure for deploying containerized applications to 
 
 ## Quick Start
 
+First, install all dependencies from root:
+
+```bash
+pnpm install
+```
+
 ### 1. Bootstrap (One-time per cloud)
 
 **GCP:**
 ```bash
 cd gcp/bootstrap
-npm install
 pulumi login --local
 pulumi stack init prod
 pulumi config set gcp:project YOUR_PROJECT_ID
@@ -29,7 +34,6 @@ pulumi up
 **Azure:**
 ```bash
 cd azure/bootstrap
-npm install
 pulumi login --local
 pulumi stack init prod
 pulumi up
@@ -40,7 +44,6 @@ pulumi up
 **GCP:**
 ```bash
 cd gcp/infrastructure
-npm install
 pulumi login gs://YOUR_STATE_BUCKET
 pulumi stack init prod
 pulumi config set gcp:project YOUR_PROJECT_ID
@@ -53,7 +56,6 @@ pulumi up
 **Azure:**
 ```bash
 cd azure/infrastructure
-npm install
 pulumi login azblob://state?storage_account=YOUR_STORAGE_ACCOUNT
 pulumi stack init prod
 pulumi config set githubOrg "your-org"
@@ -194,21 +196,17 @@ Long branch names are truncated with a hash suffix to avoid collisions.
 
 ## Testing
 
-Run tests for all stacks:
+Run tests from the root:
 
 ```bash
-# CLI tests (79 tests)
-cd cli && npm test
+# Run all tests (227 total: 81 CLI + 93 GCP + 53 Azure)
+pnpm test
 
-# GCP stack tests (93 tests)
-cd gcp/bootstrap && npm test      # 22 tests
-cd gcp/infrastructure && npm test # 35 tests
-cd gcp/app && npm test            # 36 tests
+# Run CLI tests only
+pnpm test:cli
 
-# Azure stack tests (53 tests)
-cd azure/bootstrap && npm test      # 12 tests
-cd azure/infrastructure && npm test # 17 tests
-cd azure/app && npm test            # 24 tests
+# Type-check all packages
+pnpm typecheck
 ```
 
 ## Common Issues

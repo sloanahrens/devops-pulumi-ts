@@ -105,6 +105,11 @@ jobs:
         with:
           node-version: '22'
 
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
       - name: Authenticate to Google Cloud
         id: auth
         uses: google-github-actions/auth@v2
@@ -137,7 +142,7 @@ jobs:
         id: registry
         run: |
           cd infra/infrastructure
-          npm ci --silent
+          pnpm install --frozen-lockfile
           npx pulumi login "gs://${{ secrets.STATE_BUCKET }}"
           REGISTRY_URL=$(npx pulumi stack output registryUrl -s ${{ secrets.PULUMI_ORG }}/infrastructure/prod --show-secrets 2>/dev/null)
           echo "url=$REGISTRY_URL" >> $GITHUB_OUTPUT
@@ -156,7 +161,7 @@ jobs:
       - name: Deploy to Cloud Run via Pulumi
         run: |
           cd infra/app
-          npm ci --silent
+          pnpm install --frozen-lockfile
 
           # Select or create stack
           npx pulumi stack select "${{ secrets.PULUMI_ORG }}/app/${{ vars.APP_NAME }}-${{ steps.branch.outputs.tag }}" --create 2>/dev/null || true

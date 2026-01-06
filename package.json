@@ -3,12 +3,13 @@
   "version": "1.0.0",
   "description": "Pulumi-based infrastructure for deploying containerized apps to GCP Cloud Run or Azure Container Apps",
   "private": true,
+  "packageManager": "pnpm@9.15.4",
   "scripts": {
-    "test": "cd cli && npm test",
-    "test:cli": "cd cli && npm test",
-    "lint": "cd cli && npm run lint",
-    "build": "cd cli && npm run build",
-    "typecheck": "cd bootstrap && npx tsc --noEmit && cd ../infrastructure && npx tsc --noEmit && cd ../app && npx tsc --noEmit && cd ../cli && npx tsc --noEmit"
+    "test": "pnpm -r run test",
+    "test:cli": "pnpm --filter cli run test",
+    "lint": "pnpm --filter cli run lint",
+    "build": "pnpm --filter cli run build",
+    "typecheck": "pnpm -r run typecheck"
   },
   "devDependencies": {
     "typescript": "^5.3.0"

@@ -186,11 +186,16 @@ pulumi stack init sub-a && pulumi config set azure:subscriptionId sub-a-id
 
 ## Setup Commands
 
+First, install all dependencies from the root:
+
+```bash
+pnpm install
+```
+
 ### GCP Bootstrap (one-time)
 
 ```bash
 cd gcp/bootstrap
-npm install
 pulumi login --local
 pulumi stack init prod
 pulumi config set gcp:project YOUR_PROJECT
@@ -201,7 +206,6 @@ pulumi up
 
 ```bash
 cd gcp/infrastructure
-npm install
 pulumi login gs://$(cd ../bootstrap && pulumi stack output stateBucketName)
 pulumi stack init prod
 pulumi config set gcp:project YOUR_PROJECT
@@ -215,7 +219,6 @@ pulumi up
 
 ```bash
 cd azure/bootstrap
-npm install
 pulumi login --local
 pulumi stack init prod
 pulumi up
@@ -225,7 +228,6 @@ pulumi up
 
 ```bash
 cd azure/infrastructure
-npm install
 pulumi login azblob://state?storage_account=YOUR_STORAGE_ACCOUNT
 pulumi stack init prod
 pulumi config set githubOrg "your-org"                     # Optional
@@ -238,18 +240,14 @@ pulumi up
 ## Testing
 
 ```bash
-# Run CLI tests
-cd cli && npm test
+# Run all tests (from root)
+pnpm test
 
-# Type-check GCP stacks
-cd gcp/bootstrap && npx tsc --noEmit
-cd gcp/infrastructure && npx tsc --noEmit
-cd gcp/app && npx tsc --noEmit
+# Run CLI tests only
+pnpm test:cli
 
-# Type-check Azure stacks
-cd azure/bootstrap && npx tsc --noEmit
-cd azure/infrastructure && npx tsc --noEmit
-cd azure/app && npx tsc --noEmit
+# Type-check all packages
+pnpm typecheck
 ```
 
 ## Key Files
@@ -308,10 +306,10 @@ Copy the appropriate template to your app repo:
 
 **Run checks:**
 ```bash
-npm test                    # Run all tests
-npm run lint                # ESLint
-npm run build               # Build CLI
-cd cli && npm run test:cov  # Coverage report
+pnpm test                          # Run all tests
+pnpm lint                          # ESLint
+pnpm build                         # Build CLI
+pnpm --filter cli run test:cov     # Coverage report
 ```
 
 ## Known Limitations

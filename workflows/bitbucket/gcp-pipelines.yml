@@ -5,7 +5,7 @@ image: node:22
 
 definitions:
   caches:
-    npm: ~/.npm
+    pnpm: $HOME/.local/share/pnpm/store
   services:
     docker:
       memory: 2048
@@ -16,12 +16,13 @@ pipelines:
         - step:
             name: Build and Test
             caches:
-              - npm
+              - pnpm
             script:
-              - npm ci
-              - npm run build
-              - npm run lint
-              - npm run test
+              - corepack enable && corepack prepare pnpm@latest --activate
+              - pnpm install --frozen-lockfile
+              - pnpm run build
+              - pnpm run lint
+              - pnpm run test
 
         - step:
             name: Deploy to Cloud Run
@@ -29,10 +30,11 @@ pipelines:
             services:
               - docker
             caches:
-              - npm
+              - pnpm
             script:
+              - corepack enable && corepack prepare pnpm@latest --activate
               - git clone --depth 1 https://x-token-auth:${DEVOPS_REPO_TOKEN}@bitbucket.org/${DEVOPS_REPO}.git infra
-              - cd infra && npm ci
+              - cd infra && pnpm install --frozen-lockfile
               - |
                 npx devops-deploy deploy \
                   --cloud gcp \
@@ -48,7 +50,7 @@ pipelines:
           oidc: true
           script:
             - git clone --depth 1 https://x-token-auth:${DEVOPS_REPO_TOKEN}@bitbucket.org/${DEVOPS_REPO}.git infra
-            - cd infra && npm ci
+            - cd infra && pnpm install --frozen-lockfile
             - |
               npx devops-deploy cleanup \
                 --cloud gcp \

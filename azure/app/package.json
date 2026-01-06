@@ -1,11 +1,12 @@
 {
-  "name": "app",
+  "name": "@devops-pulumi-ts/azure-app",
   "version": "1.0.0",
   "description": "Per-branch Container App deployments",
   "main": "index.ts",
   "scripts": {
     "build": "tsc",
-    "test": "vitest run"
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "@pulumi/azure-native": "^2.0.0",

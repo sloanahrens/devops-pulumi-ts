@@ -1,11 +1,12 @@
 {
-  "name": "bootstrap",
+  "name": "@devops-pulumi-ts/azure-bootstrap",
   "version": "1.0.0",
   "description": "Bootstrap resources for Pulumi state storage",
   "main": "index.ts",
   "scripts": {
     "build": "tsc",
-    "test": "vitest run"
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "@pulumi/azure-native": "^2.0.0",

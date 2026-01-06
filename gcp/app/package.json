@@ -1,11 +1,12 @@
 {
-  "name": "app",
+  "name": "@devops-pulumi-ts/gcp-app",
   "version": "1.0.0",
   "description": "App stack - per-branch Cloud Run deployments",
   "main": "index.ts",
   "scripts": {
     "build": "tsc",
-    "test": "vitest run"
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "@pulumi/gcp": "^8.0.0",

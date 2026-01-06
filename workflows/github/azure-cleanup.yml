@@ -25,7 +25,11 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '22'
-          cache: 'npm'
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
 
       - name: Setup Pulumi
         uses: pulumi/actions@v5
@@ -40,7 +44,7 @@ jobs:
       - name: Clone infrastructure repo
         run: |
           git clone --depth 1 https://github.com/${{ vars.INFRA_REPO }}.git infra
-          cd infra && npm ci
+          cd infra && pnpm install --frozen-lockfile
 
       - name: Cleanup resources
         working-directory: infra

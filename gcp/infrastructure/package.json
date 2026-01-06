@@ -1,11 +1,12 @@
 {
-  "name": "infrastructure",
+  "name": "@devops-pulumi-ts/gcp-infrastructure",
   "version": "1.0.0",
   "description": "Infrastructure stack - Artifact Registry, WIF, IAM bindings",
   "main": "index.ts",
   "scripts": {
     "build": "tsc",
-    "test": "vitest run"
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "@pulumi/gcp": "^8.0.0",
