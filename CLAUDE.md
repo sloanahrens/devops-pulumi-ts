@@ -313,7 +313,14 @@ npm run build               # Build CLI
 cd cli && npm run test:cov  # Coverage report
 ```
 
-See `docs/tech-review.md` for detailed analysis.
+## Known Limitations
+
+| Issue | Impact | Workaround |
+|-------|--------|------------|
+| Hard-coded `"organization"` in stack refs | Won't work if Pulumi org differs | Set `PULUMI_ORG` env var (not yet implemented) |
+| Health check assumes `/health` path | Apps without `/health` fail health check | Add `/health` endpoint or skip check |
+| No automatic image cleanup | Registry accumulates old images | Manual cleanup or lifecycle policies |
+| Custom domain `forceOverride: true` | Could steal domain from another service | Verify domain ownership first |
 
 ## Client Handoff
 
