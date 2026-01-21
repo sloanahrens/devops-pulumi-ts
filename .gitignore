@@ -39,6 +39,9 @@ service-account*.json
 .gcloud/
 application_default_credentials.json
 
+# Claude Code local context
+.claude/
+
 # IDE
 .idea/
 .vscode/
