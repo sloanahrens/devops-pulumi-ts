@@ -60,5 +60,3 @@ coverage/
 *.log
 npm-debug.log*
 
-# Beads issue tracker
-.beads/
